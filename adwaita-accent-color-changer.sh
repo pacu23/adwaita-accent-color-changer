@@ -30,6 +30,21 @@ calculate_foreground_color() {
     fi
 }
 
+# Function to calculate darker color
+calculate_darker_color() {
+    local hex="${1#\#}"
+    local r=$((0x${hex:0:2}))
+    local g=$((0x${hex:2:2}))
+    local b=$((0x${hex:4:2}))
+    
+    # Darken by 10%
+    r=$((r * 90 / 100))
+    g=$((g * 90 / 100))
+    b=$((b * 90 / 100))
+    
+    printf "#%02x%02x%02x\n" $r $g $b
+}
+
 # Function to change accent color in GNOME Shell CSS files
 change_shell_accent() {
     local css_file="$1"
@@ -102,6 +117,7 @@ apply_gtk_accent() {
     local backup_number=$(date +%s)
     local gtk3_file="$HOME/.config/gtk-3.0/gtk.css"
     local gtk4_file="$HOME/.config/gtk-4.0/gtk.css"
+    local darker_accent=$(calculate_darker_color "$accent_color")
     
     echo "Applying accent color to GTK themes..."
     
@@ -131,33 +147,47 @@ apply_gtk_accent() {
 @define-color accent_color $accent_color;
 @define-color accent_bg_color $accent_color;
 
-/* Apply accent color to selected items */
-* {
-  -gtk-secondary-caret-color: $accent_color;
-}
-
-selection,
-.selection,
-*:selected,
-*:selected:focus {
-  background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
-}
-
+/* Apply accent color to suggested buttons */
 button.suggested-action {
   background-color: $accent_color;
   color: $(calculate_foreground_color "$accent_color");
+  border: none;
 }
 
 button.suggested-action:hover {
-  background-color: $(echo "$accent_color" | sed 's/#//' | awk '{printf "#%02x%02x%02x", 
-    int(0.9*strtonum("0x" substr($1,1,2))), 
-    int(0.9*strtonum("0x" substr($1,3,2))), 
-    int(0.9*strtonum("0x" substr($1,5,2)))}');
+  background-color: $darker_accent;
 }
 
+button.suggested-action:active {
+  background-color: $darker_accent;
+}
+
+/* Progress bars */
 progressbar progress {
   background-color: $accent_color;
+}
+
+/* Checkboxes and radio buttons only - switches keep default colors */
+checkbutton check:checked,
+radiobutton radio:checked {
+  background-color: $accent_color;
+}
+
+/* Primary toolbuttons (like in header bars) */
+button.primary:not(.suggested-action):not(.destructive-action) {
+  background-color: $accent_color;
+  color: $(calculate_foreground_color "$accent_color");
+  border: none;
+}
+
+button.primary:not(.suggested-action):not(.destructive-action):hover {
+  background-color: $darker_accent;
+}
+
+/* Accent colored text */
+.accent,
+label.accent {
+  color: $accent_color;
 }
 
 EOF
@@ -168,31 +198,47 @@ EOF
 @define-color accent_custom $accent_color;
 @define-color accent_bg_color $accent_color;
 
-/* Apply accent color to selected items */
-* {
-  -GtkWidget-secondary-caret-color: $accent_color;
-}
-
-*:selected,
-*:selected:focus {
-  background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
-}
-
+/* Apply accent color to suggested buttons */
 button.suggested-action {
   background-color: $accent_color;
   color: $(calculate_foreground_color "$accent_color");
+  border: none;
 }
 
 button.suggested-action:hover {
-  background-color: $(echo "$accent_color" | sed 's/#//' | awk '{printf "#%02x%02x%02x", 
-    int(0.9*strtonum("0x" substr($1,1,2))), 
-    int(0.9*strtonum("0x" substr($1,3,2))), 
-    int(0.9*strtonum("0x" substr($1,5,2)))}');
+  background-color: $darker_accent;
 }
 
+button.suggested-action:active {
+  background-color: $darker_accent;
+}
+
+/* Progress bars */
 progressbar progress {
   background-color: $accent_color;
+}
+
+/* Checkboxes and radio buttons only - switches keep default colors */
+checkbutton check:checked,
+radiobutton radio:checked {
+  background-color: $accent_color;
+}
+
+/* Primary toolbuttons (like in header bars) */
+button.primary:not(.suggested-action):not(.destructive-action) {
+  background-color: $accent_color;
+  color: $(calculate_foreground_color "$accent_color");
+  border: none;
+}
+
+button.primary:not(.suggested-action):not(.destructive-action):hover {
+  background-color: $darker_accent;
+}
+
+/* Accent colored text */
+.accent,
+label.accent {
+  color: $accent_color;
 }
 
 EOF
@@ -223,19 +269,96 @@ set_shell_theme_dark() {
     fi
 }
 
+# Function to reset everything
+reset_theme() {
+    echo "========================================"
+    echo "Resetting theme customizations..."
+    echo "========================================"
+    
+    # Remove custom shell themes
+    echo "Removing custom shell themes..."
+    rm -rf "$HOME/.themes/Adwaita-shell-custom-light" 2>/dev/null
+    rm -rf "$HOME/.themes/Adwaita-shell-custom-dark" 2>/dev/null
+    
+    # Remove GTK CSS files
+    echo "Removing GTK CSS files..."
+    rm -f "$HOME/.config/gtk-3.0/gtk.css" 2>/dev/null
+    rm -f "$HOME/.config/gtk-4.0/gtk.css" 2>/dev/null
+    
+    # Remove GTK CSS backups (files ending with .bak)
+    echo "Removing GTK CSS backups..."
+    rm -f "$HOME/.config/gtk-3.0/gtk.css."*.bak 2>/dev/null
+    rm -f "$HOME/.config/gtk-4.0/gtk.css."*.bak 2>/dev/null
+    
+    # Reset GNOME accent color to default blue for dark theme
+    echo "Resetting GNOME accent color to default..."
+    if command -v gsettings >/dev/null; then
+        # Default blue for dark theme (Adwaita dark uses #1c71d8)
+        gsettings reset org.gnome.desktop.interface accent-color 2>/dev/null
+        echo "  GNOME accent color reset to default"
+    fi
+    
+    # Reset shell theme
+    echo "Resetting GNOME Shell theme..."
+    if command -v gsettings >/dev/null; then
+        gsettings reset org.gnome.shell.extensions.user-theme name 2>/dev/null
+        echo "  Shell theme reset to default"
+    fi
+    
+    echo ""
+    echo "========================================"
+    echo "Reset complete!"
+    echo "========================================"
+    echo ""
+    echo "The following has been removed/reset:"
+    echo "  ✓ Custom shell themes in ~/.themes/"
+    echo "  ✓ GTK CSS files in ~/.config/gtk-3.0/ and ~/.config/gtk-4.0/"
+    echo "  ✓ GTK CSS backup files"
+    echo "  ✓ GNOME accent color (reset to default)"
+    echo "  ✓ GNOME Shell theme (reset to default)"
+    echo ""
+    echo "You may need to:"
+    echo "  1. Log out and back in for changes to take effect"
+    echo "  2. Restart applications to see GTK changes"
+    echo "  3. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+    echo ""
+    
+    exit 0
+}
+
+# Function to show help
+show_help() {
+    echo "Usage: $0 [OPTION]"
+    echo "Change Adwaita accent colors in GNOME"
+    echo ""
+    echo "Options:"
+    echo "  --reset     Remove all customizations and reset to defaults"
+    echo "  --help      Show this help message"
+    echo ""
+    echo "Without options: Run the interactive accent color changer"
+    exit 0
+}
+
+# Check for command line arguments
+if [ "$1" = "--reset" ]; then
+    reset_theme
+elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_help
+fi
+
 # Main script
 clear
 echo "========================================"
 echo "Adwaita Accent Color Changer"
 echo "========================================"
 echo "This script will:"
-echo "  1. Extract fresh Adwaita GNOME Shell themes"
+echo "  1. Extract Adwaita GNOME Shell themes"
 echo "  2. Apply your chosen accent color to shell themes"
-echo "  3. Apply the same accent color to GTK3/GTK4 themes"
+echo "  3. Apply accent color to GTK3/GTK4 themes"
 echo "  4. Set the GNOME accent color in system settings"
 echo "  5. Set GNOME Shell to use the dark variant"
 echo ""
-echo "Warning: This will overwrite existing theme files!"
+echo "To reset everything: $0 --reset"
 echo "========================================"
 
 # Ask for confirmation
@@ -312,4 +435,6 @@ echo "  4. Restart applications to see GTK changes"
 echo "  5. Log out and back in for full system changes"
 echo ""
 echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+echo ""
+echo "To reset everything: $0 --reset"
 echo "========================================"
