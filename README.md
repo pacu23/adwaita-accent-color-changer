@@ -12,4 +12,6 @@ Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-
 
 Some parts of GNOME will still retain the accent color that's specified in GNOME settings. Currently I don't know of an easy way to change that, since it's hard coded into C, so make sure to select a color in settings that would go well with yours, or slate for neutrality.
 
+Theme Libadwaita/adw-gtk3/GNOME shell: https://github.com/pacu23/adwaita-accent-color-changer
+
 <img width="831" height="767" alt="image" src="https://github.com/user-attachments/assets/4bde5f2d-bbdb-49fa-b975-ae123fb052e1" />
