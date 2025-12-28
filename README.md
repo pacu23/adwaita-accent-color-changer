@@ -10,4 +10,6 @@ Required: adw-gtk3 theme and User Themes extension for applying the shell theme.
 
 Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-murrine may be required. I haven't tested it but it worked with adw-colors' script.
 
-Some parts of GNOME will still retain the accent color that's specified in GNOME settings. Currently I don't know of an easy way to change that, since it's hard coded into C, so make sure to select a color in settings that would go well with yours.
+Some parts of GNOME will still retain the accent color that's specified in GNOME settings. Currently I don't know of an easy way to change that, since it's hard coded into C, so make sure to select a color in settings that would go well with yours, or slate for neutrality.
+
+<img width="831" height="767" alt="image" src="https://github.com/user-attachments/assets/4bde5f2d-bbdb-49fa-b975-ae123fb052e1" />
