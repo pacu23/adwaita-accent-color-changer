@@ -114,7 +114,6 @@ extract_adwaita_theme() {
 # Function to apply accent color to GTK themes
 apply_gtk_accent() {
     local accent_color="$1"
-    local backup_number=$(date +%s)
     local gtk3_file="$HOME/.config/gtk-3.0/gtk.css"
     local gtk4_file="$HOME/.config/gtk-4.0/gtk.css"
     local darker_accent=$(calculate_darker_color "$accent_color")
@@ -128,15 +127,7 @@ apply_gtk_accent() {
     echo "  Setting GNOME accent color via gsettings..."
     gsettings set org.gnome.desktop.interface accent-color "$accent_color"
     
-    # Create backups of existing files
-    for file in "$gtk3_file" "$gtk4_file"; do
-        if [ -f "$file" ]; then
-            cp "$file" "${file}.${backup_number}.bak"
-            echo "  Backup created: ${file}.${backup_number}.bak"
-        fi
-    done
-    
-    # Create GTK4 CSS
+    # Create GTK4 CSS directory and file
     mkdir -p "$(dirname "$gtk4_file")"
     cat <<EOF > "$gtk4_file"
 :root {
@@ -192,7 +183,7 @@ label.accent {
 
 EOF
     
-    # Create GTK3 CSS
+    # Create GTK3 CSS directory and file
     mkdir -p "$(dirname "$gtk3_file")"
     cat <<EOF > "$gtk3_file"
 @define-color accent_custom $accent_color;
@@ -285,11 +276,6 @@ reset_theme() {
     rm -f "$HOME/.config/gtk-3.0/gtk.css" 2>/dev/null
     rm -f "$HOME/.config/gtk-4.0/gtk.css" 2>/dev/null
     
-    # Remove GTK CSS backups (files ending with .bak)
-    echo "Removing GTK CSS backups..."
-    rm -f "$HOME/.config/gtk-3.0/gtk.css."*.bak 2>/dev/null
-    rm -f "$HOME/.config/gtk-4.0/gtk.css."*.bak 2>/dev/null
-    
     # Reset GNOME accent color to default blue for dark theme
     echo "Resetting GNOME accent color to default..."
     if command -v gsettings >/dev/null; then
@@ -313,7 +299,6 @@ reset_theme() {
     echo "The following has been removed/reset:"
     echo "  ✓ Custom shell themes in ~/.themes/"
     echo "  ✓ GTK CSS files in ~/.config/gtk-3.0/ and ~/.config/gtk-4.0/"
-    echo "  ✓ GTK CSS backup files"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
