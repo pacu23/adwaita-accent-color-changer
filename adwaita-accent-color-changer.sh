@@ -239,6 +239,104 @@ EOF
     echo "  $gtk4_file"
 }
 
+# Function to create desktop icons extension CSS override
+create_desktop_icons_css() {
+    local accent_color="$1"
+    local fg_color=$(calculate_foreground_color "$accent_color")
+    local css_file="$HOME/.config/com.desktop.ding/stylesheet-override.css"
+    
+    echo "Creating Desktop Icons extension CSS override..."
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$css_file")"
+    
+    # Create the CSS file
+    cat <<EOF > "$css_file"
+/* Minimal: only change colors — nothing else */
+
+/* Primary accent the extension references */
+@define-color theme_selected_accent_color $accent_color;
+
+/* Common named selection colors (cover GTK/Adwaita and many apps) */
+@define-color theme_selected_bg_color    $accent_color;
+@define-color theme_selected_fg_color    $fg_color;
+
+/* Legacy/alternate names (some themes/apps still use these) */
+@define-color selected_bg_color  $accent_color;
+@define-color selected_fg_color  $fg_color;
+
+/* Ensure extension-specific names resolve to the theme variables */
+@define-color desktop_icons_bg_color @theme_selected_accent_color;
+@define-color desktop_icons_fg_color @theme_selected_fg_color;
+EOF
+    
+    echo "  Created: $css_file"
+}
+
+# Function to patch desktop icons extension JavaScript
+patch_desktop_icons_extension() {
+    local accent_color="$1"
+    
+    # Remove # if present for conversion
+    local hex="${accent_color#\#}"
+    
+    # Convert hex to decimal RGB
+    local r_dec=$((0x${hex:0:2}))
+    local g_dec=$((0x${hex:2:2}))
+    local b_dec=$((0x${hex:4:2}))
+    
+    # Convert to floats (0-1) with 10 decimal places
+    local r=$(echo "scale=10; $r_dec / 255" | bc)
+    local g=$(echo "scale=10; $g_dec / 255" | bc)
+    local b=$(echo "scale=10; $b_dec / 255" | bc)
+    
+    EXTDIR="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
+    FILE="$EXTDIR/app/desktopGrid.js"
+    
+    if [ ! -f "$FILE" ]; then
+        echo "Warning: Desktop Icons extension not found at: $FILE"
+        echo "  Skipping JavaScript patch (extension may not be installed)"
+        return 1
+    fi
+    
+    echo "Patching $FILE to use $accent_color for rubberband and drop highlights..."
+    
+    # Create backup
+    backup_file="$FILE.backup.$(date +%s)"
+    cp "$FILE" "$backup_file"
+    echo "  Created backup: $backup_file"
+    
+    # Replace direct this.Prefs.selectColor.* occurrences
+    sed -i \
+        -e "s/red:[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
+        -e "s/green:[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
+        -e "s/blue:[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
+        "$FILE"
+    
+    # Replace inverted occurrences like "1.0 - this.Prefs.selectColor.*"
+    sed -i \
+        -e "s/red:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
+        -e "s/green:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
+        -e "s/blue:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
+        "$FILE"
+    
+    echo "  Patch applied successfully."
+    
+    # Try reloading the extension (best-effort)
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        echo "  Reloading extension (disable/enable)..."
+        gnome-extensions disable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
+        sleep 0.25
+        gnome-extensions enable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
+        echo "  Reload command sent."
+    else
+        echo "  Note: 'gnome-extensions' command not found."
+        echo "  Please reload the extension manually or restart GNOME Shell."
+    fi
+    
+    echo "  Done. Test rubberband selection and drop/grid highlights — they should now use $accent_color."
+}
+
 # Function to set the shell theme to dark variant
 set_shell_theme_dark() {
     echo "Setting GNOME Shell theme to dark variant..."
@@ -276,6 +374,16 @@ reset_theme() {
     rm -f "$HOME/.config/gtk-3.0/gtk.css" 2>/dev/null
     rm -f "$HOME/.config/gtk-4.0/gtk.css" 2>/dev/null
     
+    # Remove Desktop Icons extension CSS override
+    echo "Removing Desktop Icons extension CSS..."
+    rm -f "$HOME/.config/com.desktop.ding/stylesheet-override.css" 2>/dev/null
+    rmdir "$HOME/.config/com.desktop.ding" 2>/dev/null || true
+    
+    # Note: We don't automatically restore JS backup since user might want to keep modifications
+    echo "Note: Desktop Icons extension JavaScript backups (if any) were kept in:"
+    echo "  ~/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com/app/"
+    echo "  Files ending with .backup.[timestamp]"
+    
     # Reset GNOME accent color to default blue for dark theme
     echo "Resetting GNOME accent color to default..."
     if command -v gsettings >/dev/null; then
@@ -299,6 +407,7 @@ reset_theme() {
     echo "The following has been removed/reset:"
     echo "  ✓ Custom shell themes in ~/.themes/"
     echo "  ✓ GTK CSS files in ~/.config/gtk-3.0/ and ~/.config/gtk-4.0/"
+    echo "  ✓ Desktop Icons extension CSS override"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
@@ -306,6 +415,7 @@ reset_theme() {
     echo "  1. Log out and back in for changes to take effect"
     echo "  2. Restart applications to see GTK changes"
     echo "  3. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+    echo "  4. For Desktop Icons extension: disable and re-enable it"
     echo ""
     
     exit 0
@@ -340,8 +450,9 @@ echo "This script will:"
 echo "  1. Extract Adwaita GNOME Shell themes"
 echo "  2. Apply your chosen accent color to shell themes"
 echo "  3. Apply accent color to GTK3/GTK4 themes"
-echo "  4. Set the GNOME accent color in system settings"
-echo "  5. Set GNOME Shell to use the dark variant"
+echo "  4. Apply accent color to Desktop Icons extension"
+echo "  5. Set the GNOME accent color in system settings"
+echo "  6. Set GNOME Shell to use the dark variant"
 echo ""
 echo "To reset everything: $0 --reset"
 echo "========================================"
@@ -391,7 +502,12 @@ echo ""
 apply_gtk_accent "$accent_color"
 
 echo ""
-# Step 3: Set shell theme to dark variant
+# Step 3: Apply to Desktop Icons extension
+create_desktop_icons_css "$accent_color"
+patch_desktop_icons_extension "$accent_color"
+
+echo ""
+# Step 4: Set shell theme to dark variant
 set_shell_theme_dark
 
 echo ""
@@ -402,6 +518,7 @@ echo ""
 echo "Summary:"
 echo "  • GNOME Shell themes created with accent: $accent_color"
 echo "  • GTK3/GTK4 themes configured"
+echo "  • Desktop Icons extension configured (CSS + JavaScript patch)"
 echo "  • GNOME accent color set via gsettings"
 echo "  • GNOME Shell theme set to dark variant"
 echo ""
@@ -420,6 +537,9 @@ echo "  4. Restart applications to see GTK changes"
 echo "  5. Log out and back in for full system changes"
 echo ""
 echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+echo ""
+echo "Note: If Desktop Icons extension doesn't update immediately,"
+echo "      disable and re-enable it in GNOME Extensions."
 echo ""
 echo "To reset everything: $0 --reset"
 echo "========================================"
