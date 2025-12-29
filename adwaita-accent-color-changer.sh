@@ -45,6 +45,21 @@ calculate_darker_color() {
     printf "#%02x%02x%02x\n" $r $g $b
 }
 
+# Function to convert hex color to RGB floats (0-1) with safe formatting
+hex_to_rgb_floats() {
+    local hex="${1#\#}"
+    local r=$((0x${hex:0:2}))
+    local g=$((0x${hex:2:2}))
+    local b=$((0x${hex:4:2}))
+    
+    # Convert to floats (0-1) with 10 decimal places, ensure it doesn't start with just "0."
+    # Use awk to format properly and avoid octal notation
+    printf "%s %s %s" \
+        "$(awk "BEGIN {printf \"%.10f\", $r / 255}")" \
+        "$(awk "BEGIN {printf \"%.10f\", $g / 255}")" \
+        "$(awk "BEGIN {printf \"%.10f\", $b / 255}")"
+}
+
 # Function to change accent color in GNOME Shell CSS files
 change_shell_accent() {
     local css_file="$1"
@@ -276,65 +291,83 @@ EOF
 # Function to patch desktop icons extension JavaScript
 patch_desktop_icons_extension() {
     local accent_color="$1"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
+    local js_file="$ext_dir/app/desktopGrid.js"
     
-    # Remove # if present for conversion
-    local hex="${accent_color#\#}"
+    echo "Patching Desktop Icons extension JavaScript..."
     
-    # Convert hex to decimal RGB
-    local r_dec=$((0x${hex:0:2}))
-    local g_dec=$((0x${hex:2:2}))
-    local b_dec=$((0x${hex:4:2}))
-    
-    # Convert to floats (0-1) with 10 decimal places
-    local r=$(echo "scale=10; $r_dec / 255" | bc)
-    local g=$(echo "scale=10; $g_dec / 255" | bc)
-    local b=$(echo "scale=10; $b_dec / 255" | bc)
-    
-    EXTDIR="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
-    FILE="$EXTDIR/app/desktopGrid.js"
-    
-    if [ ! -f "$FILE" ]; then
-        echo "Warning: Desktop Icons extension not found at: $FILE"
+    # Check if extension is installed
+    if [ ! -f "$js_file" ]; then
+        echo "  Warning: Desktop Icons extension not found at: $js_file"
         echo "  Skipping JavaScript patch (extension may not be installed)"
         return 1
     fi
     
-    echo "Patching $FILE to use $accent_color for rubberband and drop highlights..."
+    # Convert hex to RGB floats with safe formatting
+    read r g b <<< $(hex_to_rgb_floats "$accent_color")
     
-    # Create backup
-    backup_file="$FILE.backup.$(date +%s)"
-    cp "$FILE" "$backup_file"
-    echo "  Created backup: $backup_file"
+    echo "  Patching $js_file with RGB: $r $g $b"
     
-    # Replace direct this.Prefs.selectColor.* occurrences
-    sed -i \
-        -e "s/red:[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
-        -e "s/green:[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
-        -e "s/blue:[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
-        "$FILE"
+    # Create backup of original file
+    local timestamp=$(date +%s)
+    local backup_file="$js_file.backup.$timestamp"
+    cp "$js_file" "$backup_file"
+    echo "  Backup created: $(basename "$backup_file")"
     
-    # Replace inverted occurrences like "1.0 - this.Prefs.selectColor.*"
-    sed -i \
-        -e "s/red:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
-        -e "s/green:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
-        -e "s/blue:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
-        "$FILE"
+    # Create a temporary patch file with safe sed patterns
+    local temp_file=$(mktemp)
     
-    echo "  Patch applied successfully."
+    # Read the original file and make replacements
+    while IFS= read -r line; do
+        # Replace red: this.Prefs.selectColor.red, pattern
+        if [[ "$line" =~ red:[[:space:]]*this\.Prefs\.selectColor\.red, ]]; then
+            line="$(echo "$line" | sed "s/red:[[:space:]]*this\.Prefs\.selectColor\.red,/red: $r,/")"
+        fi
+        
+        # Replace green: this.Prefs.selectColor.green, pattern
+        if [[ "$line" =~ green:[[:space:]]*this\.Prefs\.selectColor\.green, ]]; then
+            line="$(echo "$line" | sed "s/green:[[:space:]]*this\.Prefs\.selectColor\.green,/green: $g,/")"
+        fi
+        
+        # Replace blue: this.Prefs.selectColor.blue, pattern
+        if [[ "$line" =~ blue:[[:space:]]*this\.Prefs\.selectColor\.blue, ]]; then
+            line="$(echo "$line" | sed "s/blue:[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: $b,/")"
+        fi
+        
+        # Replace red: 1.0 - this.Prefs.selectColor.red, pattern
+        if [[ "$line" =~ red:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red, ]]; then
+            line="$(echo "$line" | sed "s/red:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red,/red: $r,/")"
+        fi
+        
+        # Replace green: 1.0 - this.Prefs.selectColor.green, pattern
+        if [[ "$line" =~ green:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green, ]]; then
+            line="$(echo "$line" | sed "s/green:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green,/green: $g,/")"
+        fi
+        
+        # Replace blue: 1.0 - this.Prefs.selectColor.blue, pattern
+        if [[ "$line" =~ blue:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue, ]]; then
+            line="$(echo "$line" | sed "s/blue:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: $b,/")"
+        fi
+        
+        echo "$line" >> "$temp_file"
+    done < "$js_file"
     
-    # Try reloading the extension (best-effort)
+    # Replace the original file with the patched version
+    mv "$temp_file" "$js_file"
+    
+    echo "  JavaScript file patched successfully"
+    
+    # Try to reload the extension
     if command -v gnome-extensions >/dev/null 2>&1; then
-        echo "  Reloading extension (disable/enable)..."
+        echo "  Reloading extension..."
         gnome-extensions disable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
-        sleep 0.25
+        sleep 0.5
         gnome-extensions enable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
-        echo "  Reload command sent."
+        echo "  Extension reloaded"
     else
-        echo "  Note: 'gnome-extensions' command not found."
-        echo "  Please reload the extension manually or restart GNOME Shell."
+        echo "  Note: 'gnome-extensions' command not found"
+        echo "  Please restart GNOME Shell or disable/enable the extension manually"
     fi
-    
-    echo "  Done. Test rubberband selection and drop/grid highlights — they should now use $accent_color."
 }
 
 # Function to set the shell theme to dark variant
@@ -379,15 +412,39 @@ reset_theme() {
     rm -f "$HOME/.config/com.desktop.ding/stylesheet-override.css" 2>/dev/null
     rmdir "$HOME/.config/com.desktop.ding" 2>/dev/null || true
     
-    # Note: We don't automatically restore JS backup since user might want to keep modifications
-    echo "Note: Desktop Icons extension JavaScript backups (if any) were kept in:"
-    echo "  ~/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com/app/"
-    echo "  Files ending with .backup.[timestamp]"
+    # Restore original Desktop Icons extension JavaScript from backups
+    echo "Restoring Desktop Icons extension JavaScript..."
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
+    local js_file="$ext_dir/app/desktopGrid.js"
     
-    # Reset GNOME accent color to default blue for dark theme
+    # Find the most recent backup
+    local latest_backup=""
+    if [ -d "$ext_dir/app" ]; then
+        latest_backup=$(ls -t "$ext_dir/app/desktopGrid.js.backup."* 2>/dev/null | head -1)
+    fi
+    
+    if [ -n "$latest_backup" ] && [ -f "$latest_backup" ]; then
+        cp "$latest_backup" "$js_file" 2>/dev/null
+        echo "  JavaScript restored from: $(basename "$latest_backup")"
+    else
+        echo "  No backup found, checking for original backup..."
+        # Check for original backup (without timestamp)
+        if [ -f "$js_file.backup" ]; then
+            cp "$js_file.backup" "$js_file" 2>/dev/null
+            echo "  JavaScript restored from original backup"
+        else
+            echo "  Warning: No backup found to restore from"
+            echo "  You may need to reinstall the Desktop Icons extension"
+        fi
+    fi
+    
+    # Clean up all backup files
+    echo "Cleaning up backup files..."
+    rm -f "$ext_dir/app/desktopGrid.js.backup"* 2>/dev/null || true
+    
+    # Reset GNOME accent color to default
     echo "Resetting GNOME accent color to default..."
     if command -v gsettings >/dev/null; then
-        # Default blue for dark theme (Adwaita dark uses #1c71d8)
         gsettings reset org.gnome.desktop.interface accent-color 2>/dev/null
         echo "  GNOME accent color reset to default"
     fi
@@ -408,6 +465,7 @@ reset_theme() {
     echo "  ✓ Custom shell themes in ~/.themes/"
     echo "  ✓ GTK CSS files in ~/.config/gtk-3.0/ and ~/.config/gtk-4.0/"
     echo "  ✓ Desktop Icons extension CSS override"
+    echo "  ✓ Desktop Icons extension JavaScript (restored from backup)"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
@@ -415,7 +473,7 @@ reset_theme() {
     echo "  1. Log out and back in for changes to take effect"
     echo "  2. Restart applications to see GTK changes"
     echo "  3. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
-    echo "  4. For Desktop Icons extension: disable and re-enable it"
+    echo "  4. Disable and re-enable the Desktop Icons extension"
     echo ""
     
     exit 0
@@ -518,7 +576,7 @@ echo ""
 echo "Summary:"
 echo "  • GNOME Shell themes created with accent: $accent_color"
 echo "  • GTK3/GTK4 themes configured"
-echo "  • Desktop Icons extension configured (CSS + JavaScript patch)"
+echo "  • Desktop Icons extension configured (CSS + JavaScript)"
 echo "  • GNOME accent color set via gsettings"
 echo "  • GNOME Shell theme set to dark variant"
 echo ""
@@ -538,7 +596,7 @@ echo "  5. Log out and back in for full system changes"
 echo ""
 echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
 echo ""
-echo "Note: If Desktop Icons extension doesn't update immediately,"
+echo "Note: If Desktop Icons extension shows an error,"
 echo "      disable and re-enable it in GNOME Extensions."
 echo ""
 echo "To reset everything: $0 --reset"
