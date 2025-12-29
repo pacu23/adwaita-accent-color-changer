@@ -10,9 +10,11 @@ Required: adw-gtk3 theme and User Themes extension for applying the shell theme.
 
 Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-murrine may be required. I haven't tested it but it worked with adw-colors' script.
 
-Known issues (need help): Firefox and some elements (illustrations in GNOME settings, color picker extension, ~~Gtk4 desktop icons extension~~) aren't themed and instead follow system accent color.
+Known issues (need help): Firefox and some elements (illustrations in GNOME settings, ~~color picker extension~~, ~~Gtk4 desktop icons extension~~) aren't themed and instead follow system accent color.
 
 Included a fix for Gtk4 desktop icons – first part applies overrides to ~/.config/com.desktop.ding/stylesheet-override.css, but the second modifies the extension js, as that controls the selection grid highlight and the rubberband color, so it might disappear after extension update – just rerun the script then.
+
+Added a similar fix for color picker. If something breaks, reinstall the extensions.
 
 Theme Adwaita-colors icons: https://github.com/pacu23/adwaita-colors-icons-customizer
 
