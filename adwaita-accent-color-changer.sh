@@ -390,12 +390,21 @@ patch_color_picker_extension() {
         echo "  Patching dark stylesheet..."
         cp "$dark_css" "$dark_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace -st-accent-color and st-lighten function calls with the same accent color
-        sed -i \
-            -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 4%)/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 8%)/${accent_color}/g" \
-            "$dark_css"
+        # First replace -st-accent-color
+        sed -i "s/-st-accent-color/${accent_color}/g" "$dark_css"
+        
+        # Now replace st-lighten calls - need to handle different formats
+        # The pattern: st-lighten(-st-accent-color, 4%) or st-lighten(-st-accent-color, 8%)
+        # But after first replacement, it becomes st-lighten(#xxxxxx, 4%)
+        # So we need to replace st-lighten with the color directly
+        
+        # Use more robust pattern matching for st-lighten
+        # This pattern matches: st-lighten( followed by any characters until a comma, then space, then digits, then %)
+        # and replaces the entire st-lighten(...) with just the accent color
+        sed -i -E "s/st-lighten\([^,]+,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$dark_css"
+        
+        # Also handle any remaining st-lighten calls that might have different spacing
+        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$dark_css"
         
         echo "    Dark stylesheet patched"
     else
@@ -407,12 +416,12 @@ patch_color_picker_extension() {
         echo "  Patching light stylesheet..."
         cp "$light_css" "$light_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace -st-accent-color and st-lighten function calls with the same accent color
-        sed -i \
-            -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 4%)/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 8%)/${accent_color}/g" \
-            "$light_css"
+        # First replace -st-accent-color
+        sed -i "s/-st-accent-color/${accent_color}/g" "$light_css"
+        
+        # Replace st-lighten calls
+        sed -i -E "s/st-lighten\([^,]+,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$light_css"
+        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$light_css"
         
         echo "    Light stylesheet patched"
     else
@@ -462,31 +471,29 @@ patch_privacy_indicators_extension() {
         cp "$base_css" "$base_css.backup.$(date +%s)" 2>/dev/null || true
         
         # Replace -st-accent-color and -st-accent-fg-color
-        sed -i \
-            -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/-st-accent-fg-color/${fg_color}/g" \
-            "$base_css"
+        sed -i "s/-st-accent-color/${accent_color}/g" "$base_css"
+        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$base_css"
         
         echo "    Base stylesheet patched"
     else
         echo "  Warning: Base stylesheet not found: $base_css"
     fi
     
-    # Calculate lighter colors for st-lighten function (using the same color for all states)
-    echo "  Note: Using same accent color for all states (no lightening)"
-    
     # Patch dark stylesheet if it exists
     if [ -f "$dark_css" ]; then
         echo "  Patching dark stylesheet..."
         cp "$dark_css" "$dark_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace st-lighten(-st-accent-color, ...) with the accent color
-        # Also replace st-darken(#FFFFFF, ...) for neutral mode - we'll keep those as they are
-        # We only replace the accent color related lighten/darken
-        sed -i \
-            -e "s/st-lighten(-st-accent-color, 5%)/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 10%)/${accent_color}/g" \
-            "$dark_css"
+        # First replace -st-accent-color and -st-accent-fg-color
+        sed -i "s/-st-accent-color/${accent_color}/g" "$dark_css"
+        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$dark_css"
+        
+        # Replace st-lighten(-st-accent-color, ...) with accent color
+        # Using robust pattern matching
+        sed -i -E "s/st-lighten\(-st-accent-color,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$dark_css"
+        
+        # Also handle any remaining st-lighten calls
+        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$dark_css"
         
         echo "    Dark stylesheet patched"
     else
@@ -498,11 +505,13 @@ patch_privacy_indicators_extension() {
         echo "  Patching light stylesheet..."
         cp "$light_css" "$light_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace st-lighten(-st-accent-color, ...) with the accent color
-        sed -i \
-            -e "s/st-lighten(-st-accent-color, 5%)/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 10%)/${accent_color}/g" \
-            "$light_css"
+        # First replace -st-accent-color and -st-accent-fg-color
+        sed -i "s/-st-accent-color/${accent_color}/g" "$light_css"
+        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$light_css"
+        
+        # Replace st-lighten(-st-accent-color, ...) with accent color
+        sed -i -E "s/st-lighten\(-st-accent-color,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$light_css"
+        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$light_css"
         
         echo "    Light stylesheet patched"
     else
