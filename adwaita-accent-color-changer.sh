@@ -66,18 +66,15 @@ calculate_lighter_color() {
     printf "#%02x%02x%02x\n" $r $g $b
 }
 
-# Function to convert hex color to RGB floats (0-1)
+# Function to convert hex color to RGB floats (0-1) with C decimal point (locale-safe)
 hex_to_rgb_floats() {
     local hex="${1#\#}"
     local r=$((0x${hex:0:2}))
     local g=$((0x${hex:2:2}))
     local b=$((0x${hex:4:2}))
     
-    # Convert to floats (0-1) with 10 decimal places
-    printf "%.10f %.10f %.10f" \
-        $(echo "scale=10; $r / 255" | bc) \
-        $(echo "scale=10; $g / 255" | bc) \
-        $(echo "scale=10; $b / 255" | bc)
+    # Use awk in C locale to guarantee dot as decimal separator and leading zero
+    LC_NUMERIC=C awk -v R="$r" -v G="$g" -v B="$b" 'BEGIN{printf "%.10f %.10f %.10f", R/255, G/255, B/255}'
 }
 
 # Function to change accent color in GNOME Shell CSS files
@@ -152,7 +149,7 @@ extract_adwaita_theme() {
     echo "  Dark:  $HOME/.themes/Adwaita-shell-custom-dark/"
 }
 
-# Function to apply accent color to GTK themes
+# FIXED: Function to apply accent color to GTK themes with proper gsettings format
 apply_gtk_accent() {
     local accent_color="$1"
     local gtk3_file="$HOME/.config/gtk-3.0/gtk.css"
@@ -164,9 +161,20 @@ apply_gtk_accent() {
     # Ensure gsettings command exists
     command -v gsettings >/dev/null || { echo "Error: gsettings not found."; exit 1; }
     
-    # Set accent color in GNOME settings
+    # Set accent color in GNOME settings - FIXED: Use proper RGB tuple format
     echo "  Setting GNOME accent color via gsettings..."
-    gsettings set org.gnome.desktop.interface accent-color "$accent_color"
+    
+    # Convert hex to RGB tuple (0-1)
+    local hex="${accent_color#\#}"
+    local r=$((0x${hex:0:2}))
+    local g=$((0x${hex:2:2}))
+    local b=$((0x${hex:4:2}))
+    
+    # Create RGB tuple string with dot decimal separator using LC_NUMERIC=C
+    local rgb_tuple="($(LC_NUMERIC=C printf "%.10f" $(echo "$r/255" | bc -l)), $(LC_NUMERIC=C printf "%.10f" $(echo "$g/255" | bc -l)), $(LC_NUMERIC=C printf "%.10f" $(echo "$b/255" | bc -l)))"
+    
+    # Set using gsettings
+    gsettings set org.gnome.desktop.interface accent-color "$rgb_tuple"
     
     # Create GTK4 CSS directory and file
     mkdir -p "$(dirname "$gtk4_file")"
@@ -314,44 +322,66 @@ EOF
     echo "  Created: $css_file"
 }
 
-# Function to patch desktop icons extension JavaScript
+# Diagnostic function to check line 1167
+diagnose_desktop_icons_js() {
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
+    local js_file="$ext_dir/app/desktopGrid.js"
+    
+    echo "=== Checking Desktop Icons Extension ==="
+    
+    if [ ! -f "$js_file" ]; then
+        echo "ERROR: File not found!"
+        return 1
+    fi
+    
+    # Show the specific lines with selection colors
+    echo ""
+    echo "Lines with selection colors:"
+    grep -n -B2 -A2 "Prefs.selectColor" "$js_file" | head -30
+    
+    return 0
+}
+
+# FIXED: Function to patch desktop icons extension JavaScript (GTK4 ding) - from the new script
 patch_desktop_icons_extension() {
     local accent_color="$1"
     local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
     local js_file="$ext_dir/app/desktopGrid.js"
     
-    echo "Patching Desktop Icons extension..."
+    echo "Patching Desktop Icons extension JavaScript (rubberband selection)..."
     
-    # Check if extension is installed
     if [ ! -f "$js_file" ]; then
         echo "  Warning: Desktop Icons extension not found at: $js_file"
-        echo "  Skipping JavaScript patch (extension may not be installed)"
+        echo "  JavaScript patch skipped (extension may not be installed)"
         return 1
     fi
     
-    # Convert hex to RGB floats
-    read r g b <<< $(hex_to_rgb_floats "$accent_color")
+    # Convert hex to RGB floats (locale-safe)
+    read -r r g b <<< "$(hex_to_rgb_floats "$accent_color")"
     
-    echo "  Patching $js_file with RGB: $r $g $b"
+    echo "  Using RGB floats: $r $g $b"
     
-    # Create backup of original file
+    # Create backup
     cp "$js_file" "$js_file.backup.$(date +%s)" 2>/dev/null || true
     
-    # Replace direct this.Prefs.selectColor.* occurrences
-    sed -i \
-        -e "s/red:[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
-        -e "s/green:[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
-        -e "s/blue:[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
-        "$js_file"
+    # Replace occurrences of this.Prefs.selectColor.* with computed floats
+    # Use sed to replace the token, preserving surrounding syntax
+    sed -i -E "s/this\.Prefs\.selectColor\.red/${r}/g" "$js_file"
+    sed -i -E "s/this\.Prefs\.selectColor\.green/${g}/g" "$js_file"
+    sed -i -E "s/this\.Prefs\.selectColor\.blue/${b}/g" "$js_file"
     
-    # Replace inverted occurrences like "1.0 - this.Prefs.selectColor.*"
-    sed -i \
-        -e "s/red:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red,/red: ${r},/g" \
-        -e "s/green:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green,/green: ${g},/g" \
-        -e "s/blue:[[:space:]]*1\.0[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue,/blue: ${b},/g" \
-        "$js_file"
+    # Replace expressions like "1.0 - this.Prefs.selectColor.red" with the complement if present
+    # (if the file expects inverted values)
+    sed -i -E "s/1(\.0)?[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.red/${r}/g" "$js_file"
+    sed -i -E "s/1(\.0)?[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.green/${g}/g" "$js_file"
+    sed -i -E "s/1(\.0)?[[:space:]]*-[[:space:]]*this\.Prefs\.selectColor\.blue/${b}/g" "$js_file"
     
-    echo "  JavaScript file patched"
+    echo "  JavaScript file patched (backup created)."
+    
+    # Small verification: show a few lines with replacements (non-fatal)
+    echo ""
+    echo "  Sample patched lines near first match (if any):"
+    grep -n -E "(red:|green:|blue:).*(${r}|${g}|${b})" "$js_file" | head -n 10 || echo "  (No immediate matches shown)"
     
     # Try to reload the extension
     if command -v gnome-extensions >/dev/null 2>&1; then
@@ -373,7 +403,7 @@ patch_color_picker_extension() {
     local dark_css="$ext_dir/stylesheet-dark.css"
     local light_css="$ext_dir/stylesheet-light.css"
     
-    echo "Patching Color Picker extension..."
+    echo "Patching Color Picker extension stylesheets..."
     
     # Check if extension is installed
     if [ ! -d "$ext_dir" ]; then
@@ -394,16 +424,7 @@ patch_color_picker_extension() {
         sed -i "s/-st-accent-color/${accent_color}/g" "$dark_css"
         
         # Now replace st-lighten calls - need to handle different formats
-        # The pattern: st-lighten(-st-accent-color, 4%) or st-lighten(-st-accent-color, 8%)
-        # But after first replacement, it becomes st-lighten(#xxxxxx, 4%)
-        # So we need to replace st-lighten with the color directly
-        
-        # Use more robust pattern matching for st-lighten
-        # This pattern matches: st-lighten( followed by any characters until a comma, then space, then digits, then %)
-        # and replaces the entire st-lighten(...) with just the accent color
         sed -i -E "s/st-lighten\([^,]+,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$dark_css"
-        
-        # Also handle any remaining st-lighten calls that might have different spacing
         sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$dark_css"
         
         echo "    Dark stylesheet patched"
@@ -471,8 +492,10 @@ patch_privacy_indicators_extension() {
         cp "$base_css" "$base_css.backup.$(date +%s)" 2>/dev/null || true
         
         # Replace -st-accent-color and -st-accent-fg-color
-        sed -i "s/-st-accent-color/${accent_color}/g" "$base_css"
-        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$base_css"
+        sed -i \
+            -e "s/-st-accent-color/${accent_color}/g" \
+            -e "s/-st-accent-fg-color/${fg_color}/g" \
+            "$base_css"
         
         echo "    Base stylesheet patched"
     else
@@ -485,15 +508,21 @@ patch_privacy_indicators_extension() {
         cp "$dark_css" "$dark_css.backup.$(date +%s)" 2>/dev/null || true
         
         # First replace -st-accent-color and -st-accent-fg-color
-        sed -i "s/-st-accent-color/${accent_color}/g" "$dark_css"
-        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$dark_css"
+        sed -i \
+            -e "s/-st-accent-color/${accent_color}/g" \
+            -e "s/-st-accent-fg-color/${fg_color}/g" \
+            "$dark_css"
         
-        # Replace st-lighten(-st-accent-color, ...) with accent color
-        # Using robust pattern matching
+        # Replace st-lighten(-st-accent-color, ...) with accent color (no lightening)
         sed -i -E "s/st-lighten\(-st-accent-color,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$dark_css"
         
-        # Also handle any remaining st-lighten calls
-        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$dark_css"
+        # Also replace st-darken for neutral mode with calculated colors
+        # For st-darken(#FFFFFF, 10%) we need to calculate a darker white
+        local darken_10=$(calculate_darker_color "#ffffff")
+        local darken_20=$(calculate_darker_color "$darken_10")
+        
+        sed -i -E "s/st-darken\(#FFFFFF,[[:space:]]*10%\)/${darken_10}/g" "$dark_css"
+        sed -i -E "s/st-darken\(#FFFFFF,[[:space:]]*20%\)/${darken_20}/g" "$dark_css"
         
         echo "    Dark stylesheet patched"
     else
@@ -506,12 +535,13 @@ patch_privacy_indicators_extension() {
         cp "$light_css" "$light_css.backup.$(date +%s)" 2>/dev/null || true
         
         # First replace -st-accent-color and -st-accent-fg-color
-        sed -i "s/-st-accent-color/${accent_color}/g" "$light_css"
-        sed -i "s/-st-accent-fg-color/${fg_color}/g" "$light_css"
+        sed -i \
+            -e "s/-st-accent-color/${accent_color}/g" \
+            -e "s/-st-accent-fg-color/${fg_color}/g" \
+            "$light_css"
         
         # Replace st-lighten(-st-accent-color, ...) with accent color
         sed -i -E "s/st-lighten\(-st-accent-color,[[:space:]]*[0-9]+%\)/${accent_color}/g" "$light_css"
-        sed -i -E "s/st-lighten\([^)]+\)/${accent_color}/g" "$light_css"
         
         echo "    Light stylesheet patched"
     else
@@ -579,29 +609,39 @@ reset_theme() {
     echo "Restoring Desktop Icons extension JavaScript..."
     local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
     local js_file="$ext_dir/app/desktopGrid.js"
-    if [ -f "$js_file.backup" ]; then
-        cp "$js_file.backup" "$js_file" 2>/dev/null && echo "  JavaScript restored from backup"
+    # Find and restore the latest backup
+    if ls "$js_file.backup."* 1>/dev/null 2>&1; then
+        local latest_backup=$(ls -t "$js_file.backup."* | head -1)
+        if [ -n "$latest_backup" ] && [ -f "$latest_backup" ]; then
+            cp "$latest_backup" "$js_file" 2>/dev/null && echo "  JavaScript restored from backup: $(basename "$latest_backup")"
+        fi
+    else
+        echo "  No backup found for Desktop Icons JavaScript"
     fi
-    # Clean up backup files
-    rm -f "$ext_dir/app/desktopGrid.js.backup."* 2>/dev/null || true
+    # Clean up all backup files
+    rm -f "$js_file.backup."* 2>/dev/null || true
     
     # Restore original Color Picker extension stylesheets
     echo "Restoring Color Picker extension..."
     local color_picker_dir="$HOME/.local/share/gnome-shell/extensions/color-picker@tuberry"
     if [ -d "$color_picker_dir" ]; then
         # Restore dark stylesheet
-        local dark_backups=("$color_picker_dir/stylesheet-dark.css.backup."*)
-        if [ -f "${dark_backups[0]}" ]; then
-            cp "${dark_backups[0]}" "$color_picker_dir/stylesheet-dark.css" 2>/dev/null
-            echo "  Dark stylesheet restored"
-        fi
+        for backup in "$color_picker_dir/stylesheet-dark.css.backup."*; do
+            if [ -f "$backup" ]; then
+                cp "$backup" "$color_picker_dir/stylesheet-dark.css" 2>/dev/null
+                echo "  Dark stylesheet restored"
+                break
+            fi
+        done
         
         # Restore light stylesheet
-        local light_backups=("$color_picker_dir/stylesheet-light.css.backup."*)
-        if [ -f "${light_backups[0]}" ]; then
-            cp "${light_backups[0]}" "$color_picker_dir/stylesheet-light.css" 2>/dev/null
-            echo "  Light stylesheet restored"
-        fi
+        for backup in "$color_picker_dir/stylesheet-light.css.backup."*; do
+            if [ -f "$backup" ]; then
+                cp "$backup" "$color_picker_dir/stylesheet-light.css" 2>/dev/null
+                echo "  Light stylesheet restored"
+                break
+            fi
+        done
         
         # Clean up backup files
         rm -f "$color_picker_dir/stylesheet-dark.css.backup."* 2>/dev/null || true
@@ -613,25 +653,31 @@ reset_theme() {
     local privacy_dir="$HOME/.local/share/gnome-shell/extensions/privacy-indicators-accent-color@sopht.li"
     if [ -d "$privacy_dir" ]; then
         # Restore base stylesheet
-        local base_backups=("$privacy_dir/stylesheet.css.backup."*)
-        if [ -f "${base_backups[0]}" ]; then
-            cp "${base_backups[0]}" "$privacy_dir/stylesheet.css" 2>/dev/null
-            echo "  Base stylesheet restored"
-        fi
+        for backup in "$privacy_dir/stylesheet.css.backup."*; do
+            if [ -f "$backup" ]; then
+                cp "$backup" "$privacy_dir/stylesheet.css" 2>/dev/null
+                echo "  Base stylesheet restored"
+                break
+            fi
+        done
         
         # Restore dark stylesheet
-        local dark_backups=("$privacy_dir/stylesheet-dark.css.backup."*)
-        if [ -f "${dark_backups[0]}" ]; then
-            cp "${dark_backups[0]}" "$privacy_dir/stylesheet-dark.css" 2>/dev/null
-            echo "  Dark stylesheet restored"
-        fi
+        for backup in "$privacy_dir/stylesheet-dark.css.backup."*; do
+            if [ -f "$backup" ]; then
+                cp "$backup" "$privacy_dir/stylesheet-dark.css" 2>/dev/null
+                echo "  Dark stylesheet restored"
+                break
+            fi
+        done
         
         # Restore light stylesheet
-        local light_backups=("$privacy_dir/stylesheet-light.css.backup."*)
-        if [ -f "${light_backups[0]}" ]; then
-            cp "${light_backups[0]}" "$privacy_dir/stylesheet-light.css" 2>/dev/null
-            echo "  Light stylesheet restored"
-        fi
+        for backup in "$privacy_dir/stylesheet-light.css.backup."*; do
+            if [ -f "$backup" ]; then
+                cp "$backup" "$privacy_dir/stylesheet-light.css" 2>/dev/null
+                echo "  Light stylesheet restored"
+                break
+            fi
+        done
         
         # Clean up backup files
         rm -f "$privacy_dir/stylesheet.css.backup."* 2>/dev/null || true
@@ -673,6 +719,7 @@ reset_theme() {
     echo "  1. Log out and back in for changes to take effect"
     echo "  2. Restart applications to see GTK changes"
     echo "  3. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+    echo "  4. Disable and re-enable extensions to restore their original state"
     echo ""
     
     exit 0
@@ -707,12 +754,14 @@ echo "This script will:"
 echo "  1. Extract Adwaita GNOME Shell themes"
 echo "  2. Apply your chosen accent color to shell themes"
 echo "  3. Apply accent color to GTK3/GTK4 themes"
-echo "  4. Apply accent color to Desktop Icons extension"
-echo "  5. Apply accent color to Color Picker extension (no lightening)"
-echo "  6. Apply accent color to Privacy Indicators extension (no lightening)"
-echo "  7. Set the GNOME accent color in system settings"
-echo "  8. Set GNOME Shell to use the dark variant"
+echo "  4. Create Desktop Icons extension CSS override"
+echo "  5. Patch Desktop Icons extension JavaScript (rubberband)"
+echo "  6. Patch Color Picker extension stylesheets"
+echo "  7. Patch Privacy Indicators extension stylesheets"
+echo "  8. Set the GNOME accent color in system settings"
+echo "  9. Set GNOME Shell to use the dark variant"
 echo ""
+echo "Note: JavaScript patches modify extension files directly"
 echo "To reset everything: $0 --reset"
 echo "========================================"
 
@@ -761,20 +810,23 @@ echo ""
 apply_gtk_accent "$accent_color"
 
 echo ""
-# Step 3: Apply to Desktop Icons extension
+# Step 3: Create Desktop Icons extension CSS override
 create_desktop_icons_css "$accent_color"
+
+echo ""
+# Step 4: Patch Desktop Icons extension JavaScript
 patch_desktop_icons_extension "$accent_color"
 
 echo ""
-# Step 4: Apply to Color Picker extension (no lightening)
+# Step 5: Patch Color Picker extension stylesheets
 patch_color_picker_extension "$accent_color"
 
 echo ""
-# Step 5: Apply to Privacy Indicators extension (no lightening)
+# Step 6: Patch Privacy Indicators extension stylesheets
 patch_privacy_indicators_extension "$accent_color"
 
 echo ""
-# Step 6: Set shell theme to dark variant
+# Step 7: Set shell theme to dark variant
 set_shell_theme_dark
 
 echo ""
@@ -785,11 +837,19 @@ echo ""
 echo "Summary:"
 echo "  • GNOME Shell themes created with accent: $accent_color"
 echo "  • GTK3/GTK4 themes configured"
-echo "  • Desktop Icons extension configured (CSS + JavaScript)"
-echo "  • Color Picker extension stylesheets updated (no lightening)"
-echo "  • Privacy Indicators extension stylesheets updated (no lightening)"
+echo "  • Desktop Icons extension CSS override created"
+echo "  • Desktop Icons extension JavaScript patched (rubberband)"
+echo "  • Color Picker extension stylesheets patched"
+echo "  • Privacy Indicators extension stylesheets patched"
 echo "  • GNOME accent color set via gsettings"
 echo "  • GNOME Shell theme set to dark variant"
+echo ""
+echo "Important Notes:"
+echo "  1. Desktop Icons:"
+echo "     • CSS override: ~/.config/com.desktop.ding/stylesheet-override.css"
+echo "     • JavaScript patch: Modified extension file with backup"
+echo "  2. Color Picker: Modified extension stylesheets with backup"
+echo "  3. Privacy Indicators: Modified extension stylesheets with backup"
 echo ""
 echo "To complete setup:"
 echo "  1. Install GNOME Tweaks if not already installed:"
@@ -805,10 +865,9 @@ echo ""
 echo "  4. Restart applications to see GTK changes"
 echo "  5. Log out and back in for full system changes"
 echo ""
-echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+echo "  6. If extensions don't update, disable and re-enable them"
 echo ""
-echo "Note: If extensions don't update immediately,"
-echo "      disable and re-enable them in GNOME Extensions."
+echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
 echo ""
 echo "To reset everything: $0 --reset"
 echo "========================================"
