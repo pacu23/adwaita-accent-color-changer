@@ -16,6 +16,8 @@ Included a fix for Gtk4 desktop icons – first part applies overrides to ~/.con
 
 Added a similar fix for color picker. If something breaks, reinstall the extensions.
 
+If something else needs a fix, tell me.
+
 Theme Adwaita-colors icons: https://github.com/pacu23/adwaita-colors-icons-customizer
 
 <img width="831" height="767" alt="image" src="https://github.com/user-attachments/assets/4bde5f2d-bbdb-49fa-b975-ae123fb052e1" />
