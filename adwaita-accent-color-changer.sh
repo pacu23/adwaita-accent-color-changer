@@ -382,24 +382,19 @@ patch_color_picker_extension() {
         return 1
     fi
     
-    # Calculate lighter colors for st-lighten function
-    local lighten_4=$(calculate_lighter_color "$accent_color" 4)
-    local lighten_8=$(calculate_lighter_color "$accent_color" 8)
-    
     echo "  Using accent color: $accent_color"
-    echo "  Lighten 4%: $lighten_4"
-    echo "  Lighten 8%: $lighten_8"
+    echo "  Note: Using normal accent color (no lightening)"
     
     # Patch dark stylesheet if it exists
     if [ -f "$dark_css" ]; then
         echo "  Patching dark stylesheet..."
         cp "$dark_css" "$dark_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace -st-accent-color and st-lighten function calls
+        # Replace -st-accent-color and st-lighten function calls with the same accent color
         sed -i \
             -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 4%)/${lighten_4}/g" \
-            -e "s/st-lighten(-st-accent-color, 8%)/${lighten_8}/g" \
+            -e "s/st-lighten(-st-accent-color, 4%)/${accent_color}/g" \
+            -e "s/st-lighten(-st-accent-color, 8%)/${accent_color}/g" \
             "$dark_css"
         
         echo "    Dark stylesheet patched"
@@ -412,11 +407,11 @@ patch_color_picker_extension() {
         echo "  Patching light stylesheet..."
         cp "$light_css" "$light_css.backup.$(date +%s)" 2>/dev/null || true
         
-        # Replace -st-accent-color and st-lighten function calls
+        # Replace -st-accent-color and st-lighten function calls with the same accent color
         sed -i \
             -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/st-lighten(-st-accent-color, 4%)/${lighten_4}/g" \
-            -e "s/st-lighten(-st-accent-color, 8%)/${lighten_8}/g" \
+            -e "s/st-lighten(-st-accent-color, 4%)/${accent_color}/g" \
+            -e "s/st-lighten(-st-accent-color, 8%)/${accent_color}/g" \
             "$light_css"
         
         echo "    Light stylesheet patched"
@@ -433,6 +428,96 @@ patch_color_picker_extension() {
         sleep 0.5
         gnome-extensions enable color-picker@tuberry >/dev/null 2>&1 || true
         echo "  Color Picker extension reloaded"
+    else
+        echo "  Note: 'gnome-extensions' command not found"
+        echo "  Please restart GNOME Shell or disable/enable the extension manually"
+    fi
+}
+
+# Function to patch Privacy Indicators Accent Color extension stylesheets
+patch_privacy_indicators_extension() {
+    local accent_color="$1"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/privacy-indicators-accent-color@sopht.li"
+    local base_css="$ext_dir/stylesheet.css"
+    local dark_css="$ext_dir/stylesheet-dark.css"
+    local light_css="$ext_dir/stylesheet-light.css"
+    
+    echo "Patching Privacy Indicators Accent Color extension..."
+    
+    # Check if extension is installed
+    if [ ! -d "$ext_dir" ]; then
+        echo "  Warning: Privacy Indicators extension not found at: $ext_dir"
+        echo "  Skipping Privacy Indicators patch (extension may not be installed)"
+        return 1
+    fi
+    
+    local fg_color=$(calculate_foreground_color "$accent_color")
+    
+    echo "  Using accent color: $accent_color"
+    echo "  Foreground color: $fg_color"
+    
+    # Patch base stylesheet if it exists
+    if [ -f "$base_css" ]; then
+        echo "  Patching base stylesheet..."
+        cp "$base_css" "$base_css.backup.$(date +%s)" 2>/dev/null || true
+        
+        # Replace -st-accent-color and -st-accent-fg-color
+        sed -i \
+            -e "s/-st-accent-color/${accent_color}/g" \
+            -e "s/-st-accent-fg-color/${fg_color}/g" \
+            "$base_css"
+        
+        echo "    Base stylesheet patched"
+    else
+        echo "  Warning: Base stylesheet not found: $base_css"
+    fi
+    
+    # Calculate lighter colors for st-lighten function (using the same color for all states)
+    echo "  Note: Using same accent color for all states (no lightening)"
+    
+    # Patch dark stylesheet if it exists
+    if [ -f "$dark_css" ]; then
+        echo "  Patching dark stylesheet..."
+        cp "$dark_css" "$dark_css.backup.$(date +%s)" 2>/dev/null || true
+        
+        # Replace st-lighten(-st-accent-color, ...) with the accent color
+        # Also replace st-darken(#FFFFFF, ...) for neutral mode - we'll keep those as they are
+        # We only replace the accent color related lighten/darken
+        sed -i \
+            -e "s/st-lighten(-st-accent-color, 5%)/${accent_color}/g" \
+            -e "s/st-lighten(-st-accent-color, 10%)/${accent_color}/g" \
+            "$dark_css"
+        
+        echo "    Dark stylesheet patched"
+    else
+        echo "  Warning: Dark stylesheet not found: $dark_css"
+    fi
+    
+    # Patch light stylesheet if it exists
+    if [ -f "$light_css" ]; then
+        echo "  Patching light stylesheet..."
+        cp "$light_css" "$light_css.backup.$(date +%s)" 2>/dev/null || true
+        
+        # Replace st-lighten(-st-accent-color, ...) with the accent color
+        sed -i \
+            -e "s/st-lighten(-st-accent-color, 5%)/${accent_color}/g" \
+            -e "s/st-lighten(-st-accent-color, 10%)/${accent_color}/g" \
+            "$light_css"
+        
+        echo "    Light stylesheet patched"
+    else
+        echo "  Warning: Light stylesheet not found: $light_css"
+    fi
+    
+    echo "  Privacy Indicators extension patched"
+    
+    # Try to reload the extension
+    if command -v gnome-extensions >/dev/null 2>&1; then
+        echo "  Reloading Privacy Indicators extension..."
+        gnome-extensions disable privacy-indicators-accent-color@sopht.li >/dev/null 2>&1 || true
+        sleep 0.5
+        gnome-extensions enable privacy-indicators-accent-color@sopht.li >/dev/null 2>&1 || true
+        echo "  Privacy Indicators extension reloaded"
     else
         echo "  Note: 'gnome-extensions' command not found"
         echo "  Please restart GNOME Shell or disable/enable the extension manually"
@@ -514,6 +599,37 @@ reset_theme() {
         rm -f "$color_picker_dir/stylesheet-light.css.backup."* 2>/dev/null || true
     fi
     
+    # Restore original Privacy Indicators extension stylesheets
+    echo "Restoring Privacy Indicators extension..."
+    local privacy_dir="$HOME/.local/share/gnome-shell/extensions/privacy-indicators-accent-color@sopht.li"
+    if [ -d "$privacy_dir" ]; then
+        # Restore base stylesheet
+        local base_backups=("$privacy_dir/stylesheet.css.backup."*)
+        if [ -f "${base_backups[0]}" ]; then
+            cp "${base_backups[0]}" "$privacy_dir/stylesheet.css" 2>/dev/null
+            echo "  Base stylesheet restored"
+        fi
+        
+        # Restore dark stylesheet
+        local dark_backups=("$privacy_dir/stylesheet-dark.css.backup."*)
+        if [ -f "${dark_backups[0]}" ]; then
+            cp "${dark_backups[0]}" "$privacy_dir/stylesheet-dark.css" 2>/dev/null
+            echo "  Dark stylesheet restored"
+        fi
+        
+        # Restore light stylesheet
+        local light_backups=("$privacy_dir/stylesheet-light.css.backup."*)
+        if [ -f "${light_backups[0]}" ]; then
+            cp "${light_backups[0]}" "$privacy_dir/stylesheet-light.css" 2>/dev/null
+            echo "  Light stylesheet restored"
+        fi
+        
+        # Clean up backup files
+        rm -f "$privacy_dir/stylesheet.css.backup."* 2>/dev/null || true
+        rm -f "$privacy_dir/stylesheet-dark.css.backup."* 2>/dev/null || true
+        rm -f "$privacy_dir/stylesheet-light.css.backup."* 2>/dev/null || true
+    fi
+    
     # Reset GNOME accent color to default blue for dark theme
     echo "Resetting GNOME accent color to default..."
     if command -v gsettings >/dev/null; then
@@ -540,6 +656,7 @@ reset_theme() {
     echo "  ✓ Desktop Icons extension CSS override"
     echo "  ✓ Desktop Icons extension JavaScript (restored from backup)"
     echo "  ✓ Color Picker extension stylesheets (restored from backup)"
+    echo "  ✓ Privacy Indicators extension stylesheets (restored from backup)"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
@@ -582,9 +699,10 @@ echo "  1. Extract Adwaita GNOME Shell themes"
 echo "  2. Apply your chosen accent color to shell themes"
 echo "  3. Apply accent color to GTK3/GTK4 themes"
 echo "  4. Apply accent color to Desktop Icons extension"
-echo "  5. Apply accent color to Color Picker extension"
-echo "  6. Set the GNOME accent color in system settings"
-echo "  7. Set GNOME Shell to use the dark variant"
+echo "  5. Apply accent color to Color Picker extension (no lightening)"
+echo "  6. Apply accent color to Privacy Indicators extension (no lightening)"
+echo "  7. Set the GNOME accent color in system settings"
+echo "  8. Set GNOME Shell to use the dark variant"
 echo ""
 echo "To reset everything: $0 --reset"
 echo "========================================"
@@ -639,11 +757,15 @@ create_desktop_icons_css "$accent_color"
 patch_desktop_icons_extension "$accent_color"
 
 echo ""
-# Step 4: Apply to Color Picker extension
+# Step 4: Apply to Color Picker extension (no lightening)
 patch_color_picker_extension "$accent_color"
 
 echo ""
-# Step 5: Set shell theme to dark variant
+# Step 5: Apply to Privacy Indicators extension (no lightening)
+patch_privacy_indicators_extension "$accent_color"
+
+echo ""
+# Step 6: Set shell theme to dark variant
 set_shell_theme_dark
 
 echo ""
@@ -655,7 +777,8 @@ echo "Summary:"
 echo "  • GNOME Shell themes created with accent: $accent_color"
 echo "  • GTK3/GTK4 themes configured"
 echo "  • Desktop Icons extension configured (CSS + JavaScript)"
-echo "  • Color Picker extension stylesheets updated"
+echo "  • Color Picker extension stylesheets updated (no lightening)"
+echo "  • Privacy Indicators extension stylesheets updated (no lightening)"
 echo "  • GNOME accent color set via gsettings"
 echo "  • GNOME Shell theme set to dark variant"
 echo ""
