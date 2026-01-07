@@ -583,314 +583,6 @@ patch_privacy_indicators_extension() {
     fi
 }
 
-# MINIMAL FIX: Function to apply accent color to Firefox (URL bar + site selection only)
-apply_firefox_accent() {
-    local accent_color="$1"
-    local darker_accent=$(calculate_darker_color "$accent_color")
-    
-    echo "========================================"
-    echo "Firefox Accent Color Integration"
-    echo "========================================"
-    echo "Note: This requires the 'firefox-gnome-theme' to be installed."
-    echo "      You can install it via the 'addwater' GUI installer."
-    echo ""
-    
-    read -p "Apply accent color to Firefox? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Skipping Firefox integration."
-        return 0
-    fi
-    
-    # Clear any previous profile_dir
-    local profile_dir=""
-    
-    # Step 1: Try multiple methods to detect Firefox profile
-    echo "Detecting Firefox profile directory..."
-    
-    # Method 1: Check if user already has a known profile path
-    local known_path="$HOME/.mozilla/firefox/3bmln68y.default-release"
-    if [ -d "$known_path" ] && [ -d "$known_path/chrome" ]; then
-        profile_dir="$known_path"
-        echo "  Found known profile: $profile_dir"
-    fi
-    
-    # Method 2: Look for default-release profiles
-    if [ -z "$profile_dir" ] && [ -d "$HOME/.mozilla/firefox" ]; then
-        local possible_profiles=$(find "$HOME/.mozilla/firefox" -maxdepth 1 -type d -name "*.default-release" 2>/dev/null | head -5)
-        if [ -n "$possible_profiles" ]; then
-            local profile_count=$(echo "$possible_profiles" | wc -l)
-            if [ "$profile_count" -eq 1 ]; then
-                profile_dir="$possible_profiles"
-                echo "  Found single default-release profile: $profile_dir"
-            else
-                echo "  Found multiple profiles:"
-                echo "$possible_profiles" | nl -w2 -s': '
-                read -p "  Enter profile number (or 'skip'): " profile_num
-                if [[ "$profile_num" =~ ^[0-9]+$ ]]; then
-                    profile_dir=$(echo "$possible_profiles" | sed -n "${profile_num}p")
-                fi
-            fi
-        fi
-    fi
-    
-    # Method 3: Parse profiles.ini for the Default=1 profile
-    if [ -z "$profile_dir" ] && [ -f "$HOME/.mozilla/firefox/profiles.ini" ]; then
-        echo "  Parsing profiles.ini..."
-        
-        # Look for the profile with Default=1
-        local default_profile=$(awk -F= '
-            /^\[Profile/ { profile="" }
-            /^Default=1/ { default_found=1 }
-            /^Path=/ && default_found { 
-                profile=$2; 
-                default_found=0;
-            }
-            END { print profile }
-        ' "$HOME/.mozilla/firefox/profiles.ini")
-        
-        if [ -n "$default_profile" ]; then
-            local full_path="$HOME/.mozilla/firefox/$default_profile"
-            if [ -d "$full_path" ]; then
-                profile_dir="$full_path"
-                echo "  Found default profile from profiles.ini: $profile_dir"
-            fi
-        fi
-    fi
-    
-    # Step 2: If auto-detection failed, guide user to about:support
-    if [ -z "$profile_dir" ] || [ ! -d "$profile_dir" ]; then
-        echo ""
-        echo "Please follow these steps:"
-        echo "  1. Open Firefox"
-        echo "  2. Type 'about:support' in the address bar and press Enter"
-        echo "  3. Find the section called 'Application Basics'"
-        echo "  4. Look for 'Profile Directory'"
-        echo "  5. Click the 'Open Directory' button"
-        echo "  6. A file manager will open - that's your profile directory"
-        echo ""
-        echo "The path should look something like:"
-        echo "  /home/yourname/.mozilla/firefox/xxxxxxxx.default-release"
-        echo ""
-        
-        while true; do
-            read -p "Enter the full path to your Firefox profile directory (or 'skip'): " profile_dir
-            
-            if [ -z "$profile_dir" ] || [ "$profile_dir" = "skip" ]; then
-                echo "Skipping Firefox integration."
-                return 0
-            fi
-            
-            # Expand tilde and handle relative paths
-            profile_dir="${profile_dir/#\~/$HOME}"
-            
-            # Make sure it's an absolute path
-            if [[ ! "$profile_dir" = /* ]]; then
-                profile_dir="$PWD/$profile_dir"
-            fi
-            
-            # Check if directory exists
-            if [ ! -d "$profile_dir" ]; then
-                echo "❌ Directory not found: $profile_dir"
-                echo "   Please check the path and try again."
-                continue
-            fi
-            
-            # Check for chrome directory (firefox-gnome-theme should be here)
-            if [ ! -d "$profile_dir/chrome" ]; then
-                echo "⚠️  Directory exists but 'chrome' subdirectory not found."
-                echo "   Make sure firefox-gnome-theme is installed in this profile."
-                read -p "   Continue anyway? (y/n): " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    continue
-                fi
-            fi
-            
-            break
-        done
-    fi
-    
-    echo ""
-    echo "✅ Using profile directory: $profile_dir"
-    
-    # Step 3: Check/create directories with proper permissions
-    local chrome_dir="$profile_dir/chrome"
-    local theme_dir="$chrome_dir/firefox-gnome-theme"
-    local custom_css="$theme_dir/customChrome.css"
-    local custom_content="$theme_dir/customContent.css"
-    
-    # Create chrome directory if it doesn't exist
-    if [ ! -d "$chrome_dir" ]; then
-        echo "  Creating chrome directory..."
-        mkdir -p "$chrome_dir" || {
-            echo "❌ Failed to create chrome directory."
-            echo "   Check permissions for: $profile_dir"
-            return 1
-        }
-    fi
-    
-    # Check if firefox-gnome-theme is installed
-    if [ ! -d "$theme_dir" ]; then
-        echo ""
-        echo "❌ ERROR: firefox-gnome-theme not found!"
-        echo "   Expected directory: $theme_dir"
-        echo ""
-        echo "Please install it first using one of these methods:"
-        echo ""
-        echo "METHOD 1: GUI Installer (Recommended)"
-        echo "  1. Open Firefox"
-        echo "  2. Go to: https://addons.mozilla.org/firefox/addon/addwater/"
-        echo "  3. Click 'Add to Firefox'"
-        echo "  4. Follow the installation instructions"
-        echo ""
-        echo "METHOD 2: Command Line Installer"
-        echo "  Run this command in terminal:"
-        echo "  curl -s -o- https://raw.githubusercontent.com/rafaelmardojai/firefox-gnome-theme/master/scripts/install-by-curl.sh | bash"
-        echo ""
-        read -p "Press Enter after installation, or any key to skip Firefox theming..."
-        echo
-        
-        # Check again after user claims to have installed
-        if [ ! -d "$theme_dir" ]; then
-            echo "Theme still not found. Skipping Firefox integration."
-            return 1
-        fi
-    fi
-    
-    echo "  ✅ firefox-gnome-theme found at: $theme_dir"
-    
-    # Step 4: Create MINIMAL custom CSS files
-    echo ""
-    echo "Creating minimal custom CSS files..."
-    
-    # Create customChrome.css - ONLY Firefox UI fixes
-    echo "  Creating customChrome.css..."
-    cat <<EOF > "$custom_css"
-/* Custom accent color for Firefox GNOME Theme */
-/* Generated by GNOME theme script - $(date) */
-/* MINIMAL: Only fixes browser UI, leaves websites untouched */
-
-:root {
-  --gnome-accent-bg: $accent_color !important;
-  --gnome-accent: $darker_accent !important;
-  --gnome-accent-active: $(calculate_lighter_color "$accent_color" 10) !important;
-}
-
-:root[lwt-sidebar] {
-  --gnome-accent-bg: $accent_color !important;
-  --gnome-accent: $darker_accent !important;
-}
-
-/* Selection colors for BROWSER UI only */
-*::selection {
-  background-color: $accent_color !important;
-}
-
-/* URL bar & SEARCH BAR text selection - dimmed/transparent style */
-.urlbar-input::selection,
-#urlbar-input::selection,
-.searchbar-textbox::selection {
-  background-color: color-mix(in srgb, $accent_color 40%, transparent) !important;
-}
-EOF
-    
-    # Create customContent.css - MINIMAL: Only site selection + scrollbars
-    echo "  Creating customContent.css..."
-    cat <<EOF > "$custom_content"
-/* MINIMAL custom content styles for Firefox */
-/* Generated by GNOME theme script - $(date) */
-/* Only changes scrollbars and text selection on websites - nothing else! */
-
-
-/* Apply accent to TEXT SELECTION ON WEB PAGES only */
-::selection {
-  background-color: $accent_color !important;
-  color: #ffffff !important;
-EOF
-    
-    # Verify files were created
-    if [ ! -f "$custom_css" ]; then
-        echo "❌ Failed to create $custom_css"
-        echo "   Check write permissions for: $theme_dir"
-        echo "   You can try: chmod 755 \"$theme_dir\""
-        return 1
-    fi
-    
-    if [ ! -f "$custom_content" ]; then
-        echo "⚠️  Failed to create $custom_content (but customChrome.css was created)"
-    fi
-    
-    echo "  ✅ Minimal CSS files created successfully!"
-    echo "     - $custom_css (browser UI only)"
-    echo "     - $custom_content (site selection + scrollbars only)"
-    
-    # Step 5: Check and display Firefox preference instructions
-    echo ""
-    echo "For the theme to work, you MUST set these preferences in Firefox:"
-    echo ""
-    echo "  1. Open Firefox"
-    echo "  2. Type 'about:config' in the address bar"
-    echo "  3. Click 'Accept the Risk and Continue'"
-    echo "  4. Search for each preference below and set it to 'true'"
-    echo ""
-    echo "Required preferences:"
-    echo "  • toolkit.legacyUserProfileCustomizations.stylesheets = true"
-    echo "  • svg.context-properties.content.enabled = true"
-    echo ""
-    echo "How to set:"
-    echo "  - Double-click the preference name to toggle it to 'true'"
-    echo "  - Or right-click → 'Modify' → 'true' → OK"
-    echo ""
-    echo "After setting these preferences:"
-    echo "  1. Completely close and restart Firefox"
-    echo "  2. You should now have:"
-    echo "     • Dimmed text selection in URL/search bars"
-    echo "     • Your accent color for text selection on websites"
-    echo "     • Accent-colored scrollbars"
-    echo "     • All website colors remain UNCHANGED"
-    echo ""
-    
-    # Check if preferences are already set
-    local prefs_file="$profile_dir/prefs.js"
-    if [ -f "$prefs_file" ]; then
-        echo "Checking existing preferences..."
-        local pref1_set=$(grep -c '"toolkit.legacyUserProfileCustomizations.stylesheets".*true' "$prefs_file" 2>/dev/null || true)
-        local pref2_set=$(grep -c '"svg.context-properties.content.enabled".*true' "$prefs_file" 2>/dev/null || true)
-        
-        if [ "$pref1_set" -gt 0 ] && [ "$pref2_set" -gt 0 ]; then
-            echo "✅ Both required preferences are already set!"
-        else
-            echo "⚠️  Some preferences may not be set correctly."
-        fi
-    fi
-    
-    read -p "Press Enter when you're ready to continue..."
-    
-    echo ""
-    echo "========================================"
-    echo "Firefox Configuration Summary"
-    echo "========================================"
-    echo "Profile directory: $profile_dir"
-    echo "Theme directory:   $theme_dir"
-    echo "Custom CSS files:  ✅ Created"
-    echo ""
-    echo "IMPORTANT: This minimal approach ONLY affects:"
-    echo "  • Firefox UI text selection (dimmed in URL/search bars)"
-    echo "  • Website text selection (your accent color)"
-    echo "  • Scrollbar colors"
-    echo ""
-    echo "All website colors (links, buttons, text) remain UNTOUCHED."
-    echo ""
-    echo "To troubleshoot:"
-    echo "  - Check file permissions: ls -la \"$theme_dir/\""
-    echo "  - Verify CSS content: cat \"$custom_css\""
-    echo "  - Restart Firefox in terminal: firefox --safe-mode"
-    echo ""
-    
-    return 0
-}
-
 # Function to apply GNOME Shell themes to GDM
 apply_gdm_theme() {
     echo ""
@@ -1076,14 +768,6 @@ reset_theme() {
         rm -f "$privacy_dir/stylesheet-light.css.original" 2>/dev/null || true
     fi
     
-    # Remove Firefox customizations
-    echo "Removing Firefox customizations..."
-    find "$HOME/.mozilla/firefox" -name "customChrome.css" -delete 2>/dev/null
-    find "$HOME/.mozilla/firefox" -name "customContent.css" -delete 2>/dev/null
-    find "$HOME/.mozilla/firefox" -name "customChrome.css.backup.*" -delete 2>/dev/null
-    find "$HOME/.mozilla/firefox" -name "customContent.css.backup.*" -delete 2>/dev/null
-    echo "  Firefox CSS files removed"
-    
     # Remove GDM themes if they exist
     echo "Removing GDM themes..."
     if [ -d "/usr/share/themes/Adwaita-shell-custom-dark" ]; then
@@ -1132,7 +816,6 @@ reset_theme() {
     echo "  ✓ Desktop Icons extension JavaScript (restored from backup)"
     echo "  ✓ Color Picker extension stylesheets (restored from backup)"
     echo "  ✓ Privacy Indicators extension stylesheets (restored from backup)"
-    echo "  ✓ Firefox custom CSS files"
     echo "  ✓ GDM themes in /usr/share/themes/"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
@@ -1142,7 +825,6 @@ reset_theme() {
     echo "  2. Restart applications to see GTK changes"
     echo "  3. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
     echo "  4. Disable and re-enable extensions to restore their original state"
-    echo "  5. Restart Firefox to clear theme customizations"
     echo ""
     
     exit 0
@@ -1181,10 +863,9 @@ echo "  4. Create Desktop Icons extension CSS override"
 echo "  5. Patch Desktop Icons extension JavaScript (rubberband)"
 echo "  6. Patch Color Picker extension stylesheets"
 echo "  7. Patch Privacy Indicators extension stylesheets"
-echo "  8. Apply accent color to Firefox (optional)"
-echo "  9. Apply themes to GDM login screen (optional)"
-echo "  10. Set the GNOME accent color in system settings"
-echo "  11. Set GNOME Shell to use the dark variant"
+echo "  8. Apply themes to GDM login screen (optional)"
+echo "  9. Set the GNOME accent color in system settings"
+echo "  10. Set GNOME Shell to use the dark variant"
 echo ""
 echo "Note: JavaScript patches modify extension files directly"
 echo "To reset everything: $0 --reset"
@@ -1251,15 +932,11 @@ echo ""
 patch_privacy_indicators_extension "$accent_color"
 
 echo ""
-# Step 7: Apply to Firefox (optional)
-apply_firefox_accent "$accent_color"
-
-echo ""
-# Step 8: Apply to GDM (optional)
+# Step 7: Apply to GDM (optional)
 apply_gdm_theme
 
 echo ""
-# Step 9: Set shell theme to dark variant
+# Step 8: Set shell theme to dark variant
 set_shell_theme_dark
 
 echo ""
@@ -1274,15 +951,9 @@ echo "  • Desktop Icons extension CSS override created"
 echo "  • Desktop Icons extension JavaScript patched (rubberband)"
 echo "  • Color Picker extension stylesheets patched"
 echo "  • Privacy Indicators extension stylesheets patched"
-echo "  • Firefox custom CSS files created (if selected)"
 echo "  • GDM themes applied (if selected)"
 echo "  • GNOME accent color set via gsettings"
 echo "  • GNOME Shell theme set to dark variant"
-echo ""
-echo "Firefox theming (minimal approach):"
-echo "  • URL/search bar: Dimmed text selection"
-echo "  • Websites: Your accent color for text selection + scrollbars"
-echo "  • All website colors (links, buttons, text): UNTOUCHED"
 echo ""
 echo "To complete setup:"
 echo "  1. Install GNOME Tweaks if not already installed:"
