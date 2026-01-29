@@ -3,6 +3,9 @@
 # Force decimal separator to be dot for the entire script
 export LC_NUMERIC=C
 
+# Global variable for foreground color (white by default)
+FOREGROUND_COLOR="#ffffff"
+
 # Function to check if we're running in GNOME
 check_gnome() {
     if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ] || [ "$XDG_CURRENT_DESKTOP" = "ubuntu:GNOME" ] || 
@@ -42,19 +45,33 @@ validate_hex_color() {
     fi
 }
 
-# Function to calculate foreground color (white or black)
-calculate_foreground_color() {
-    local hex="${1#\#}"
-    local r=$((0x${hex:0:2}))
-    local g=$((0x${hex:2:2}))
-    local b=$((0x${hex:4:2}))
-    local lum=$(( (r * 299 + g * 587 + b * 114) / 1000 ))
+# Function to prompt user for foreground color choice
+prompt_foreground_color() {
+    local accent_color="$1"
     
-    if [ $lum -gt 128 ]; then
-        echo "#000000"
+    echo ""
+    echo "========================================"
+    echo "Foreground Color Selection"
+    echo "========================================"
+    echo "By default, foreground text on accent-colored elements is WHITE (#ffffff)."
+    echo ""
+    echo "With your chosen accent color: $accent_color"
+    echo ""
+    echo "Would you like to use BLACK (#000000) text instead of white?"
+    echo "This may be preferred for very light accent colors."
+    echo ""
+    
+    read -p "Use BLACK text instead of WHITE? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        FOREGROUND_COLOR="#000000"
+        echo "Using BLACK foreground color: $FOREGROUND_COLOR"
     else
-        echo "#ffffff"
+        FOREGROUND_COLOR="#ffffff"
+        echo "Using WHITE foreground color: $FOREGROUND_COLOR"
     fi
+    
+    echo ""
 }
 
 # Function to calculate darker color
@@ -128,7 +145,7 @@ apply_gtk_accent() {
 /* Apply accent color to suggested buttons */
 button.suggested-action {
   background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
+  color: $FOREGROUND_COLOR;
   border: none;
 }
 
@@ -154,7 +171,7 @@ radiobutton radio:checked {
 /* Primary toolbuttons (like in header bars) */
 button.primary:not(.suggested-action):not(.destructive-action) {
   background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
+  color: $FOREGROUND_COLOR;
   border: none;
 }
 
@@ -179,7 +196,7 @@ EOF
 /* Apply accent color to suggested buttons */
 button.suggested-action {
   background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
+  color: $FOREGROUND_COLOR;
   border: none;
 }
 
@@ -205,7 +222,7 @@ radiobutton radio:checked {
 /* Primary toolbuttons (like in header bars) */
 button.primary:not(.suggested-action):not(.destructive-action) {
   background-color: $accent_color;
-  color: $(calculate_foreground_color "$accent_color");
+  color: $FOREGROUND_COLOR;
   border: none;
 }
 
@@ -505,7 +522,6 @@ change_shell_accent() {
         return 1
     fi
     
-    local fg_color=$(calculate_foreground_color "$new_accent")
     local lighten_4=$(calculate_lighter_color "$new_accent" 4)
     local lighten_8=$(calculate_lighter_color "$new_accent" 8)
     
@@ -521,7 +537,7 @@ change_shell_accent() {
     
     # Replace accent color variables
     sed -i "s/-st-accent-color/${new_accent}/g" "$css_file"
-    sed -i "s/-st-accent-fg-color/${fg_color}/g" "$css_file"
+    sed -i "s/-st-accent-fg-color/${FOREGROUND_COLOR}/g" "$css_file"
     
     # Replace st-lighten function calls with actual colors
     sed -i "s/st-lighten(-st-accent-color, 4%)/${lighten_4}/g" "$css_file"
@@ -561,7 +577,6 @@ set_gnome_accent_color() {
 # Function to create desktop icons extension CSS override
 create_desktop_icons_css() {
     local accent_color="$1"
-    local fg_color=$(calculate_foreground_color "$accent_color")
     local css_file="$HOME/.config/com.desktop.ding/stylesheet-override.css"
     
     echo "Creating Desktop Icons extension CSS override..."
@@ -584,11 +599,11 @@ create_desktop_icons_css() {
 
 /* Common named selection colors (cover GTK/Adwaita and many apps) */
 @define-color theme_selected_bg_color    $accent_color;
-@define-color theme_selected_fg_color    $fg_color;
+@define-color theme_selected_fg_color    $FOREGROUND_COLOR;
 
 /* Legacy/alternate names (some themes/apps still use these) */
 @define-color selected_bg_color  $accent_color;
-@define-color selected_fg_color  $fg_color;
+@define-color selected_fg_color  $FOREGROUND_COLOR;
 
 /* Ensure extension-specific names resolve to the theme variables */
 @define-color desktop_icons_bg_color @theme_selected_accent_color;
@@ -769,16 +784,13 @@ patch_privacy_indicators_extension() {
         return 1
     fi
     
-    local fg_color=$(calculate_foreground_color "$accent_color")
-    
     echo "  Using accent color: $accent_color"
-    echo "  Foreground color: $fg_color"
+    echo "  Foreground color: $FOREGROUND_COLOR"
     
     # Helper function to patch a single CSS file
     patch_css_file() {
         local css_file="$1"
         local accent_color="$2"
-        local fg_color="$3"
         
         if [ ! -f "$css_file" ]; then
             return 1
@@ -799,7 +811,7 @@ patch_privacy_indicators_extension() {
         # Apply patches
         sed -i \
             -e "s/-st-accent-color/${accent_color}/g" \
-            -e "s/-st-accent-fg-color/${fg_color}/g" \
+            -e "s/-st-accent-fg-color/${FOREGROUND_COLOR}/g" \
             "$css_file"
         
         # Replace st-lighten calls
@@ -819,7 +831,7 @@ patch_privacy_indicators_extension() {
     # Patch each file
     if [ -f "$base_css" ]; then
         echo "  Patching base stylesheet..."
-        patch_css_file "$base_css" "$accent_color" "$fg_color"
+        patch_css_file "$base_css" "$accent_color"
         echo "    Base stylesheet patched"
     else
         echo "  Warning: Base stylesheet not found: $base_css"
@@ -827,7 +839,7 @@ patch_privacy_indicators_extension() {
     
     if [ -f "$dark_css" ]; then
         echo "  Patching dark stylesheet..."
-        patch_css_file "$dark_css" "$accent_color" "$fg_color"
+        patch_css_file "$dark_css" "$accent_color"
         echo "    Dark stylesheet patched"
     else
         echo "  Warning: Dark stylesheet not found: $dark_css"
@@ -835,7 +847,7 @@ patch_privacy_indicators_extension() {
     
     if [ -f "$light_css" ]; then
         echo "  Patching light stylesheet..."
-        patch_css_file "$light_css" "$accent_color" "$fg_color"
+        patch_css_file "$light_css" "$accent_color"
         echo "    Light stylesheet patched"
     else
         echo "  Warning: Light stylesheet not found: $light_css"
@@ -1201,6 +1213,9 @@ echo ""
 echo "Using accent color: $accent_color"
 echo ""
 
+# Prompt for foreground color choice
+prompt_foreground_color "$accent_color"
+
 # Step 1: Apply GTK overrides (always run, desktop-agnostic)
 apply_gtk_accent "$accent_color"
 
@@ -1284,6 +1299,7 @@ echo "========================================"
 echo ""
 echo "Summary:"
 echo "  • GTK3/GTK4 themes configured with accent: $accent_color"
+echo "  • Foreground text color: $FOREGROUND_COLOR"
 if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
     if [ -d "$HOME/.local/share/themes/custom_light" ] || [ -d "$HOME/.local/share/themes/custom_dark" ]; then
         echo "  • Firefox/Thunderbird fix applied"
