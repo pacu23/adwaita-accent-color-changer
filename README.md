@@ -12,7 +12,7 @@ Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-
 
 Included optional copying of the shell themes to /usr/share so they are available for GDM.
 
-Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, that's why Adw-gtk3 theme optionally gets cloned in .themes and renamed. Set your gtk3 theme to that and it will follow the custom accent.
+Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, due to theme name detection, that's why Adw-gtk3 theme optionally gets cloned in .local/share/themes and renamed.
 
 Included a fix for the following extensions: Gtk4 desktop icons, Accent privacy indicators, Color picker. Modifying the extension's files in ~/.local/share/gnome-shell/extensions (if installed there). It might reset after an update, so just rerun the script. If something breaks, just reinstall the extensions.
 
