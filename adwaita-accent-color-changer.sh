@@ -3,6 +3,30 @@
 # Force decimal separator to be dot for the entire script
 export LC_NUMERIC=C
 
+# Function to check if we're running in GNOME
+check_gnome() {
+    if [ "$XDG_CURRENT_DESKTOP" = "GNOME" ] || [ "$XDG_CURRENT_DESKTOP" = "ubuntu:GNOME" ] || 
+       [ "$XDG_SESSION_DESKTOP" = "gnome" ] || [ "$DESKTOP_SESSION" = "gnome" ]; then
+        return 0
+    elif command -v gnome-shell >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to check if extension exists
+extension_exists() {
+    local ext_id="$1"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/$ext_id"
+    
+    if [ -d "$ext_dir" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to validate hex color input
 validate_hex_color() {
     local color="$1"
@@ -80,89 +104,7 @@ hex_to_rgb_floats() {
     LC_NUMERIC=C awk -v R="$r" -v G="$g" -v B="$b" 'BEGIN{printf "%.10f %.10f %.10f", R/255, G/255, B/255}'
 }
 
-# Function to change accent color in GNOME Shell CSS files
-change_shell_accent() {
-    local css_file="$1"
-    local new_accent="$2"
-    
-    if [ ! -f "$css_file" ]; then
-        echo "Warning: CSS file not found: $css_file"
-        return 1
-    fi
-    
-    local fg_color=$(calculate_foreground_color "$new_accent")
-    local lighten_4=$(calculate_lighter_color "$new_accent" 4)
-    local lighten_8=$(calculate_lighter_color "$new_accent" 8)
-    
-    # FIRST restore original values if they exist in backup
-    local backup_file="${css_file}.backup.original"
-    if [ -f "$backup_file" ]; then
-        echo "  Restoring original CSS from backup..."
-        cp "$backup_file" "$css_file"
-    else
-        # Create backup of original file before first modification
-        cp "$css_file" "$backup_file"
-    fi
-    
-    # Replace accent color variables
-    sed -i "s/-st-accent-color/${new_accent}/g" "$css_file"
-    sed -i "s/-st-accent-fg-color/${fg_color}/g" "$css_file"
-    
-    # Replace st-lighten function calls with actual colors
-    sed -i "s/st-lighten(-st-accent-color, 4%)/${lighten_4}/g" "$css_file"
-    sed -i "s/st-lighten(-st-accent-color, 8%)/${lighten_8}/g" "$css_file"
-    
-    echo "  Updated: $(basename "$css_file")"
-}
-
-# Function to extract Adwaita theme
-extract_adwaita_theme() {
-    echo "Extracting Adwaita GNOME Shell theme..."
-    
-    # Define theme paths
-    LIGHT_TARGET="$HOME/.themes/Adwaita-shell-custom-light/gnome-shell"
-    DARK_TARGET="$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell"
-    
-    # Clean existing directories
-    rm -rf "$HOME/.themes/Adwaita-shell-custom-light" "$HOME/.themes/Adwaita-shell-custom-dark"
-    
-    # Create directories
-    mkdir -p "$LIGHT_TARGET" "$DARK_TARGET"
-    
-    # Extract SVG files and CSS variants once
-    TEMP_DIR=$(mktemp -d)
-    for resource in $(gresource list /usr/share/gnome-shell/gnome-shell-theme.gresource); do
-        filename="${resource#/org/gnome/shell/theme/}"
-        mkdir -p "$TEMP_DIR/$(dirname "$filename")"
-        gresource extract /usr/share/gnome-shell/gnome-shell-theme.gresource \
-            "$resource" > "$TEMP_DIR/$filename" 2>/dev/null
-    done
-    
-    # Copy all SVG and CSS files (except the variant files we're renaming)
-    for file in "$TEMP_DIR"/*; do
-        basefile=$(basename "$file")
-        
-        # Skip the main CSS variant files (we'll handle these separately)
-        if [[ "$basefile" != "gnome-shell-light.css" ]] && \
-           [[ "$basefile" != "gnome-shell-dark.css" ]]; then
-            cp "$file" "$LIGHT_TARGET/"
-            cp "$file" "$DARK_TARGET/"
-        fi
-    done
-    
-    # Create the main CSS files by renaming variants
-    cp "$TEMP_DIR/gnome-shell-light.css" "$LIGHT_TARGET/gnome-shell.css"
-    cp "$TEMP_DIR/gnome-shell-dark.css" "$DARK_TARGET/gnome-shell.css"
-    
-    # Clean up temp
-    rm -rf "$TEMP_DIR"
-    
-    echo "Theme extracted to:"
-    echo "  Light: $HOME/.themes/Adwaita-shell-custom-light/"
-    echo "  Dark:  $HOME/.themes/Adwaita-shell-custom-dark/"
-}
-
-# FIXED: Function to apply accent color to GTK themes with proper gsettings format
+# Function to apply accent color to GTK themes (desktop-agnostic)
 apply_gtk_accent() {
     local accent_color="$1"
     local gtk3_file="$HOME/.config/gtk-3.0/gtk.css"
@@ -170,24 +112,7 @@ apply_gtk_accent() {
     local darker_accent=$(calculate_darker_color "$accent_color")
     
     echo "Applying accent color to GTK themes..."
-    
-    # Ensure gsettings command exists
-    command -v gsettings >/dev/null || { echo "Error: gsettings not found."; exit 1; }
-    
-    # Set accent color in GNOME settings - FIXED: Use proper RGB tuple format
-    echo "  Setting GNOME accent color via gsettings..."
-    
-    # Convert hex to RGB tuple (0-1)
-    local hex="${accent_color#\#}"
-    local r=$((0x${hex:0:2}))
-    local g=$((0x${hex:2:2}))
-    local b=$((0x${hex:4:2}))
-    
-    # Create RGB tuple string with dot decimal separator using LC_NUMERIC=C
-    local rgb_tuple="($(echo "scale=3; $r/255" | bc -l), $(echo "scale=3; $g/255" | bc -l), $(echo "scale=3; $b/255" | bc -l))"
-    
-    # Set using gsettings
-    gsettings set org.gnome.desktop.interface accent-color "$rgb_tuple"
+    echo "  (This works on any desktop environment with GTK3/GTK4 apps)"
     
     # Create GTK4 CSS directory and file
     mkdir -p "$(dirname "$gtk4_file")"
@@ -299,6 +224,283 @@ EOF
     echo "GTK theme files created:"
     echo "  $gtk3_file"
     echo "  $gtk4_file"
+    echo ""
+    echo "Note: Restart GTK applications to see changes."
+}
+
+# Function to check if adw-gtk3 themes exist
+check_adw_gtk3_exists() {
+    local light_found=0
+    local dark_found=0
+    
+    # Check in various locations
+    local locations=(
+        "/usr/share/themes"
+        "$HOME/.themes"
+        "$HOME/.local/share/themes"
+    )
+    
+    echo "Searching for adw-gtk3 themes..."
+    
+    for location in "${locations[@]}"; do
+        if [ -d "$location/adw-gtk3" ]; then
+            light_found=1
+            echo "  Found adw-gtk3 in: $location"
+        fi
+        if [ -d "$location/adw-gtk3-dark" ]; then
+            dark_found=1
+            echo "  Found adw-gtk3-dark in: $location"
+        fi
+    done
+    
+    if [ $light_found -eq 0 ]; then
+        echo "❌ adw-gtk3 theme not found!"
+    fi
+    if [ $dark_found -eq 0 ]; then
+        echo "❌ adw-gtk3-dark theme not found!"
+    fi
+    
+    if [ $light_found -eq 1 ] && [ $dark_found -eq 1 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to apply Firefox/Thunderbird fix
+apply_firefox_fix() {
+    echo ""
+    echo "========================================"
+    echo "Firefox/Thunderbird GTK Theme Fix"
+    echo "========================================"
+    echo "Firefox and Thunderbird have a quirk: they ignore GTK CSS overrides"
+    echo "when the current theme name contains 'adwaita', 'adw', or 'adw-gtk3'."
+    echo ""
+    echo "This fix creates symlinked themes with custom names to work"
+    echo "around this issue, allowing Firefox/Thunderbird to use accent colors."
+    echo ""
+    
+    read -p "Apply Firefox/Thunderbird fix? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipping Firefox/Thunderbird fix."
+        return 0
+    fi
+    
+    # Check if adw-gtk3 themes exist
+    if ! check_adw_gtk3_exists; then
+        echo ""
+        echo "❌ adw-gtk3 themes not found in standard locations!"
+        echo "   Please install adw-gtk3 theme first."
+        echo "   On Ubuntu/Debian: sudo apt install adw-gtk3-theme"
+        echo "   On Fedora: sudo dnf install adw-gtk3-theme"
+        echo "   Or download from: https://github.com/lassekongo83/adw-gtk3"
+        return 1
+    fi
+    
+    # Create .themes directory if it doesn't exist
+    mkdir -p "$HOME/.themes"
+    
+    # Find adw-gtk3 and adw-gtk3-dark themes
+    local light_source=""
+    local dark_source=""
+    
+    # Check in various locations
+    local locations=(
+        "/usr/share/themes"
+        "$HOME/.themes"
+        "$HOME/.local/share/themes"
+    )
+    
+    for location in "${locations[@]}"; do
+        if [ -d "$location/adw-gtk3" ] && [ -z "$light_source" ]; then
+            light_source="$location/adw-gtk3"
+        fi
+        if [ -d "$location/adw-gtk3-dark" ] && [ -z "$dark_source" ]; then
+            dark_source="$location/adw-gtk3-dark"
+        fi
+    done
+    
+    if [ -z "$light_source" ] || [ -z "$dark_source" ]; then
+        echo "❌ Could not find both adw-gtk3 and adw-gtk3-dark themes"
+        return 1
+    fi
+    
+    # Remove existing symlinks if they exist
+    echo "Removing existing symlinks if any..."
+    rm -rf "$HOME/.themes/custom-light" 2>/dev/null
+    rm -rf "$HOME/.themes/custom-dark" 2>/dev/null
+    
+    # Create symlinks for the theme directories
+    echo "Creating symlinks..."
+    
+    # For light theme
+    echo "  Creating custom-light symlink..."
+    ln -sf "$light_source" "$HOME/.themes/custom-light"
+    
+    # Remove the symlinked index.theme and create our own
+    if [ -L "$HOME/.themes/custom-light/index.theme" ] || [ -f "$HOME/.themes/custom-light/index.theme" ]; then
+        rm -f "$HOME/.themes/custom-light/index.theme"
+    fi
+    
+    # Create custom index.theme for light variant
+    cat <<EOF > "$HOME/.themes/custom-light/index.theme"
+[X-GNOME-Metatheme]
+Name=custom-light
+Type=X-GNOME-Metatheme
+Comment=adw-gtk3 theme
+Encoding=UTF-8
+GtkTheme=custom-light
+EOF
+    
+    # For dark theme
+    echo "  Creating custom-dark symlink..."
+    ln -sf "$dark_source" "$HOME/.themes/custom-dark"
+    
+    # Remove the symlinked index.theme and create our own
+    if [ -L "$HOME/.themes/custom-dark/index.theme" ] || [ -f "$HOME/.themes/custom-dark/index.theme" ]; then
+        rm -f "$HOME/.themes/custom-dark/index.theme"
+    fi
+    
+    # Create custom index.theme for dark variant
+    cat <<EOF > "$HOME/.themes/custom-dark/index.theme"
+[X-GNOME-Metatheme]
+Name=custom-dark
+Type=X-GNOME-Metatheme
+Comment=adw-gtk3-dark theme
+Encoding=UTF-8
+GtkTheme=custom-dark
+EOF
+    
+    echo ""
+    echo "✅ Firefox/Thunderbird fix applied!"
+    echo ""
+    echo "Created symlinked themes:"
+    echo "  • custom-light → $(readlink -f "$HOME/.themes/custom-light" 2>/dev/null || echo "$light_source")"
+    echo "  • custom-dark → $(readlink -f "$HOME/.themes/custom-dark" 2>/dev/null || echo "$dark_source")"
+    echo ""
+    echo "To use these themes:"
+    echo "  1. Open your desktop environment's theme settings"
+    echo "  2. Set the application theme to 'custom-light' or 'custom-dark'"
+    echo "  3. Restart Firefox/Thunderbird to see the changes"
+    echo ""
+    echo "Note: These are symlinks, so updates to the original adw-gtk3"
+    echo "      themes will be reflected automatically."
+    
+    return 0
+}
+
+# GNOME-specific functions below
+# Only run if user confirms they want GNOME-specific features
+
+# Function to extract Adwaita theme
+extract_adwaita_theme() {
+    echo "Extracting Adwaita GNOME Shell theme..."
+    
+    # Define theme paths
+    LIGHT_TARGET="$HOME/.themes/Adwaita-shell-custom-light/gnome-shell"
+    DARK_TARGET="$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell"
+    
+    # Clean existing directories
+    rm -rf "$HOME/.themes/Adwaita-shell-custom-light" "$HOME/.themes/Adwaita-shell-custom-dark"
+    
+    # Create directories
+    mkdir -p "$LIGHT_TARGET" "$DARK_TARGET"
+    
+    # Extract SVG files and CSS variants once
+    TEMP_DIR=$(mktemp -d)
+    for resource in $(gresource list /usr/share/gnome-shell/gnome-shell-theme.gresource); do
+        filename="${resource#/org/gnome/shell/theme/}"
+        mkdir -p "$TEMP_DIR/$(dirname "$filename")"
+        gresource extract /usr/share/gnome-shell/gnome-shell-theme.gresource \
+            "$resource" > "$TEMP_DIR/$filename" 2>/dev/null
+    done
+    
+    # Copy all SVG and CSS files (except the variant files we're renaming)
+    for file in "$TEMP_DIR"/*; do
+        basefile=$(basename "$file")
+        
+        # Skip the main CSS variant files (we'll handle these separately)
+        if [[ "$basefile" != "gnome-shell-light.css" ]] && \
+           [[ "$basefile" != "gnome-shell-dark.css" ]]; then
+            cp "$file" "$LIGHT_TARGET/"
+            cp "$file" "$DARK_TARGET/"
+        fi
+    done
+    
+    # Create the main CSS files by renaming variants
+    cp "$TEMP_DIR/gnome-shell-light.css" "$LIGHT_TARGET/gnome-shell.css"
+    cp "$TEMP_DIR/gnome-shell-dark.css" "$DARK_TARGET/gnome-shell.css"
+    
+    # Clean up temp
+    rm -rf "$TEMP_DIR"
+    
+    echo "Theme extracted to:"
+    echo "  Light: $HOME/.themes/Adwaita-shell-custom-light/"
+    echo "  Dark:  $HOME/.themes/Adwaita-shell-custom-dark/"
+}
+
+# Function to change accent color in GNOME Shell CSS files
+change_shell_accent() {
+    local css_file="$1"
+    local new_accent="$2"
+    
+    if [ ! -f "$css_file" ]; then
+        echo "Warning: CSS file not found: $css_file"
+        return 1
+    fi
+    
+    local fg_color=$(calculate_foreground_color "$new_accent")
+    local lighten_4=$(calculate_lighter_color "$new_accent" 4)
+    local lighten_8=$(calculate_lighter_color "$new_accent" 8)
+    
+    # FIRST restore original values if they exist in backup
+    local backup_file="${css_file}.backup.original"
+    if [ -f "$backup_file" ]; then
+        echo "  Restoring original CSS from backup..."
+        cp "$backup_file" "$css_file"
+    else
+        # Create backup of original file before first modification
+        cp "$css_file" "$backup_file"
+    fi
+    
+    # Replace accent color variables
+    sed -i "s/-st-accent-color/${new_accent}/g" "$css_file"
+    sed -i "s/-st-accent-fg-color/${fg_color}/g" "$css_file"
+    
+    # Replace st-lighten function calls with actual colors
+    sed -i "s/st-lighten(-st-accent-color, 4%)/${lighten_4}/g" "$css_file"
+    sed -i "s/st-lighten(-st-accent-color, 8%)/${lighten_8}/g" "$css_file"
+    
+    echo "  Updated: $(basename "$css_file")"
+}
+
+# Function to set GNOME accent color via gsettings
+set_gnome_accent_color() {
+    local accent_color="$1"
+    
+    echo "Setting GNOME accent color via gsettings..."
+    
+    # Ensure gsettings command exists
+    if ! command -v gsettings >/dev/null; then
+        echo "  Warning: gsettings not found. Skipping GNOME accent color setting."
+        return 1
+    fi
+    
+    # Convert hex to RGB tuple (0-1)
+    local hex="${accent_color#\#}"
+    local r=$((0x${hex:0:2}))
+    local g=$((0x${hex:2:2}))
+    local b=$((0x${hex:4:2}))
+    
+    # Create RGB tuple string with dot decimal separator using LC_NUMERIC=C
+    local rgb_tuple="($(echo "scale=3; $r/255" | bc -l), $(echo "scale=3; $g/255" | bc -l), $(echo "scale=3; $b/255" | bc -l))"
+    
+    # Set using gsettings
+    gsettings set org.gnome.desktop.interface accent-color "$rgb_tuple"
+    
+    echo "  GNOME accent color set to: $accent_color"
+    return 0
 }
 
 # Function to create desktop icons extension CSS override
@@ -308,6 +510,12 @@ create_desktop_icons_css() {
     local css_file="$HOME/.config/com.desktop.ding/stylesheet-override.css"
     
     echo "Creating Desktop Icons extension CSS override..."
+    
+    # Check if extension exists
+    if ! extension_exists "gtk4-ding@smedius.gitlab.com"; then
+        echo "  Desktop Icons extension not found. Skipping."
+        return 1
+    fi
     
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$css_file")"
@@ -333,19 +541,27 @@ create_desktop_icons_css() {
 EOF
     
     echo "  Created/Updated: $css_file"
+    return 0
 }
 
 # FIXED: Function to patch desktop icons extension JavaScript - NOW HANDLES RE-RUNS PROPERLY
 patch_desktop_icons_extension() {
     local accent_color="$1"
-    local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
+    local ext_id="gtk4-ding@smedius.gitlab.com"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/$ext_id"
     local js_file="$ext_dir/app/desktopGrid.js"
     
     echo "Patching Desktop Icons extension JavaScript (rubberband selection)..."
     
+    # Check if extension exists
+    if ! extension_exists "$ext_id"; then
+        echo "  Desktop Icons extension not found. Skipping JavaScript patch."
+        return 1
+    fi
+    
     if [ ! -f "$js_file" ]; then
-        echo "  Warning: Desktop Icons extension not found at: $js_file"
-        echo "  JavaScript patch skipped (extension may not be installed)"
+        echo "  Warning: Desktop Icons extension JavaScript file not found at: $js_file"
+        echo "  JavaScript patch skipped"
         return 1
     fi
     
@@ -379,36 +595,34 @@ patch_desktop_icons_extension() {
     
     echo "  JavaScript file patched (backup created)."
     
-    # Small verification
-    echo ""
-    echo "  Sample patched lines near first match (if any):"
-    grep -n -E "(red:|green:|blue:).*(${r}|${g}|${b})" "$js_file" | head -n 10 || echo "  (No immediate matches shown)"
-    
     # Try to reload the extension
     if command -v gnome-extensions >/dev/null 2>&1; then
         echo "  Reloading extension..."
-        gnome-extensions disable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
+        gnome-extensions disable "$ext_id" >/dev/null 2>&1 || true
         sleep 0.5
-        gnome-extensions enable gtk4-ding@smedius.gitlab.com >/dev/null 2>&1 || true
+        gnome-extensions enable "$ext_id" >/dev/null 2>&1 || true
         echo "  Extension reloaded"
     else
         echo "  Note: 'gnome-extensions' command not found"
         echo "  Please restart GNOME Shell or disable/enable the extension manually"
     fi
+    
+    return 0
 }
 
 # FIXED: Function to patch Color Picker extension stylesheets - NOW HANDLES RE-RUNS PROPERLY
 patch_color_picker_extension() {
     local accent_color="$1"
-    local ext_dir="$HOME/.local/share/gnome-shell/extensions/color-picker@tuberry"
+    local ext_id="color-picker@tuberry"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/$ext_id"
     local dark_css="$ext_dir/stylesheet-dark.css"
     local light_css="$ext_dir/stylesheet-light.css"
     
     echo "Patching Color Picker extension stylesheets..."
     
-    if [ ! -d "$ext_dir" ]; then
-        echo "  Warning: Color Picker extension not found at: $ext_dir"
-        echo "  Skipping Color Picker patch (extension may not be installed)"
+    # Check if extension exists
+    if ! extension_exists "$ext_id"; then
+        echo "  Color Picker extension not found. Skipping."
         return 1
     fi
     
@@ -471,29 +685,32 @@ patch_color_picker_extension() {
     
     if command -v gnome-extensions >/dev/null 2>&1; then
         echo "  Reloading Color Picker extension..."
-        gnome-extensions disable color-picker@tuberry >/dev/null 2>&1 || true
+        gnome-extensions disable "$ext_id" >/dev/null 2>&1 || true
         sleep 0.5
-        gnome-extensions enable color-picker@tuberry >/dev/null 2>&1 || true
+        gnome-extensions enable "$ext_id" >/dev/null 2>&1 || true
         echo "  Color Picker extension reloaded"
     else
         echo "  Note: 'gnome-extensions' command not found"
         echo "  Please restart GNOME Shell or disable/enable the extension manually"
     fi
+    
+    return 0
 }
 
 # FIXED: Function to patch Privacy Indicators Accent Color extension stylesheets - NOW HANDLES RE-RUNS PROPERLY
 patch_privacy_indicators_extension() {
     local accent_color="$1"
-    local ext_dir="$HOME/.local/share/gnome-shell/extensions/privacy-indicators-accent-color@sopht.li"
+    local ext_id="privacy-indicators-accent-color@sopht.li"
+    local ext_dir="$HOME/.local/share/gnome-shell/extensions/$ext_id"
     local base_css="$ext_dir/stylesheet.css"
     local dark_css="$ext_dir/stylesheet-dark.css"
     local light_css="$ext_dir/stylesheet-light.css"
     
     echo "Patching Privacy Indicators Accent Color extension..."
     
-    if [ ! -d "$ext_dir" ]; then
-        echo "  Warning: Privacy Indicators extension not found at: $ext_dir"
-        echo "  Skipping Privacy Indicators patch (extension may not be installed)"
+    # Check if extension exists
+    if ! extension_exists "$ext_id"; then
+        echo "  Privacy Indicators extension not found. Skipping."
         return 1
     fi
     
@@ -573,14 +790,16 @@ patch_privacy_indicators_extension() {
     
     if command -v gnome-extensions >/dev/null 2>&1; then
         echo "  Reloading Privacy Indicators extension..."
-        gnome-extensions disable privacy-indicators-accent-color@sopht.li >/dev/null 2>&1 || true
+        gnome-extensions disable "$ext_id" >/dev/null 2>&1 || true
         sleep 0.5
-        gnome-extensions enable privacy-indicators-accent-color@sopht.li >/dev/null 2>&1 || true
+        gnome-extensions enable "$ext_id" >/dev/null 2>&1 || true
         echo "  Privacy Indicators extension reloaded"
     else
         echo "  Note: 'gnome-extensions' command not found"
         echo "  Please restart GNOME Shell or disable/enable the extension manually"
     fi
+    
+    return 0
 }
 
 # Function to apply GNOME Shell themes to GDM
@@ -673,22 +892,22 @@ reset_theme() {
     echo "Resetting theme customizations..."
     echo "========================================"
     
-    # Remove custom shell themes
+    # Remove custom shell themes (GNOME-specific)
     echo "Removing custom shell themes..."
     rm -rf "$HOME/.themes/Adwaita-shell-custom-light" 2>/dev/null
     rm -rf "$HOME/.themes/Adwaita-shell-custom-dark" 2>/dev/null
     
-    # Remove GTK CSS files
+    # Remove GTK CSS files (desktop-agnostic)
     echo "Removing GTK CSS files..."
     rm -f "$HOME/.config/gtk-3.0/gtk.css" 2>/dev/null
     rm -f "$HOME/.config/gtk-4.0/gtk.css" 2>/dev/null
     
-    # Remove Desktop Icons extension CSS override
+    # Remove Desktop Icons extension CSS override (GNOME-specific)
     echo "Removing Desktop Icons extension CSS..."
     rm -f "$HOME/.config/com.desktop.ding/stylesheet-override.css" 2>/dev/null
     rmdir "$HOME/.config/com.desktop.ding" 2>/dev/null || true
     
-    # Restore original Desktop Icons extension JavaScript
+    # Restore original Desktop Icons extension JavaScript (GNOME-specific)
     echo "Restoring Desktop Icons extension JavaScript..."
     local ext_dir="$HOME/.local/share/gnome-shell/extensions/gtk4-ding@smedius.gitlab.com"
     local js_file="$ext_dir/app/desktopGrid.js"
@@ -704,7 +923,7 @@ reset_theme() {
     rm -f "$js_file.backup."* 2>/dev/null || true
     rm -f "${js_file}.original" 2>/dev/null || true
     
-    # Restore original Color Picker extension stylesheets
+    # Restore original Color Picker extension stylesheets (GNOME-specific)
     echo "Restoring Color Picker extension..."
     local color_picker_dir="$HOME/.local/share/gnome-shell/extensions/color-picker@tuberry"
     if [ -d "$color_picker_dir" ]; then
@@ -731,7 +950,7 @@ reset_theme() {
         rm -f "$color_picker_dir/stylesheet-light.css.original" 2>/dev/null || true
     fi
     
-    # Restore original Privacy Indicators extension stylesheets
+    # Restore original Privacy Indicators extension stylesheets (GNOME-specific)
     echo "Restoring Privacy Indicators extension..."
     local privacy_dir="$HOME/.local/share/gnome-shell/extensions/privacy-indicators-accent-color@sopht.li"
     if [ -d "$privacy_dir" ]; then
@@ -768,7 +987,7 @@ reset_theme() {
         rm -f "$privacy_dir/stylesheet-light.css.original" 2>/dev/null || true
     fi
     
-    # Remove GDM themes if they exist
+    # Remove GDM themes if they exist (GNOME-specific)
     echo "Removing GDM themes..."
     if [ -d "/usr/share/themes/Adwaita-shell-custom-dark" ]; then
         sudo rm -rf "/usr/share/themes/Adwaita-shell-custom-dark" 2>/dev/null
@@ -784,12 +1003,26 @@ reset_theme() {
         echo "  GDM default-pure theme removed"
     fi
     
-    # Remove shell theme backups
+    # Remove shell theme backups (GNOME-specific)
     echo "Removing shell theme backups..."
     rm -f "$HOME/.themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
     rm -f "$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
     
-    # Reset GNOME accent color to default blue for dark theme
+    # Remove Firefox/Thunderbird fix symlinks
+    echo "Removing Firefox/Thunderbird fix symlinks..."
+    if [ -L "$HOME/.themes/custom-light" ]; then
+        rm -f "$HOME/.themes/custom-light"
+        echo "  Removed custom-light symlink"
+    fi
+    if [ -L "$HOME/.themes/custom-dark" ]; then
+        rm -f "$HOME/.themes/custom-dark"
+        echo "  Removed custom-dark symlink"
+    fi
+    # Also remove any leftover index.theme files
+    rm -f "$HOME/.themes/custom-light/index.theme" 2>/dev/null
+    rm -f "$HOME/.themes/custom-dark/index.theme" 2>/dev/null
+    
+    # Reset GNOME accent color to default blue for dark theme (GNOME-specific)
     echo "Resetting GNOME accent color to default..."
     if command -v gsettings >/dev/null; then
         # Default blue for dark theme (Adwaita dark uses #1c71d8)
@@ -797,7 +1030,7 @@ reset_theme() {
         echo "  GNOME accent color reset to default"
     fi
     
-    # Reset shell theme
+    # Reset shell theme (GNOME-specific)
     echo "Resetting GNOME Shell theme..."
     if command -v gsettings >/dev/null; then
         gsettings reset org.gnome.shell.extensions.user-theme name 2>/dev/null
@@ -817,6 +1050,7 @@ reset_theme() {
     echo "  ✓ Color Picker extension stylesheets (restored from backup)"
     echo "  ✓ Privacy Indicators extension stylesheets (restored from backup)"
     echo "  ✓ GDM themes in /usr/share/themes/"
+    echo "  ✓ Firefox/Thunderbird fix symlinks"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
@@ -833,7 +1067,7 @@ reset_theme() {
 # Function to show help
 show_help() {
     echo "Usage: $0 [OPTION]"
-    echo "Change Adwaita accent colors in GNOME"
+    echo "Change GTK accent colors with optional GNOME-specific enhancements"
     echo ""
     echo "Options:"
     echo "  --reset     Remove all customizations and reset to defaults"
@@ -853,21 +1087,19 @@ fi
 # Main script
 clear
 echo "========================================"
-echo "Adwaita Accent Color Changer"
+echo "GTK Accent Color Changer"
 echo "========================================"
 echo "This script will:"
-echo "  1. Extract Adwaita GNOME Shell themes"
-echo "  2. Apply your chosen accent color to shell themes"
-echo "  3. Apply accent color to GTK3/GTK4 themes"
-echo "  4. Create Desktop Icons extension CSS override"
-echo "  5. Patch Desktop Icons extension JavaScript (rubberband)"
-echo "  6. Patch Color Picker extension stylesheets"
-echo "  7. Patch Privacy Indicators extension stylesheets"
-echo "  8. Apply themes to GDM login screen (optional)"
-echo "  9. Set the GNOME accent color in system settings"
-echo "  10. Set GNOME Shell to use the dark variant"
+echo "  1. Apply your chosen accent color to GTK3/GTK4 themes"
+echo "  2. Optionally apply Firefox/Thunderbird theme fix"
 echo ""
-echo "Note: JavaScript patches modify extension files directly"
+echo "If you're using GNOME, additional options will be available:"
+echo "  • Apply accent color to GNOME Shell themes"
+echo "  • Patch GNOME extensions (if installed)"
+echo "  • Apply themes to GDM login screen"
+echo "  • Set GNOME accent color in system settings"
+echo ""
+echo "Note: GTK theme changes work on any desktop environment"
 echo "To reset everything: $0 --reset"
 echo "========================================"
 
@@ -903,41 +1135,75 @@ echo ""
 echo "Using accent color: $accent_color"
 echo ""
 
-# Step 1: Extract Adwaita themes
-extract_adwaita_theme
-
-echo ""
-echo "Applying accent color to GNOME Shell themes..."
-change_shell_accent "$HOME/.themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css" "$accent_color"
-change_shell_accent "$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css" "$accent_color"
-
-echo ""
-# Step 2: Apply to GTK themes
+# Step 1: Apply GTK overrides (always run, desktop-agnostic)
 apply_gtk_accent "$accent_color"
 
 echo ""
-# Step 3: Create Desktop Icons extension CSS override
-create_desktop_icons_css "$accent_color"
+# Step 2: Apply Firefox/Thunderbird fix (optional)
+apply_firefox_fix
 
 echo ""
-# Step 4: Patch Desktop Icons extension JavaScript
-patch_desktop_icons_extension "$accent_color"
-
-echo ""
-# Step 5: Patch Color Picker extension stylesheets
-patch_color_picker_extension "$accent_color"
-
-echo ""
-# Step 6: Patch Privacy Indicators extension stylesheets
-patch_privacy_indicators_extension "$accent_color"
-
-echo ""
-# Step 7: Apply to GDM (optional)
-apply_gdm_theme
-
-echo ""
-# Step 8: Set shell theme to dark variant
-set_shell_theme_dark
+# Check if we're in GNOME and ask about GNOME-specific features
+if check_gnome; then
+    echo "========================================"
+    echo "GNOME-Specific Features"
+    echo "========================================"
+    echo "Detected GNOME desktop environment."
+    echo "Additional GNOME-specific theming options are available."
+    echo ""
+    
+    read -p "Apply GNOME-specific theming? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo ""
+        
+        # Step 3: Extract Adwaita themes (GNOME-specific)
+        extract_adwaita_theme
+        
+        echo ""
+        echo "Applying accent color to GNOME Shell themes..."
+        change_shell_accent "$HOME/.themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css" "$accent_color"
+        change_shell_accent "$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css" "$accent_color"
+        
+        echo ""
+        # Step 4: Set GNOME accent color (GNOME-specific)
+        set_gnome_accent_color "$accent_color"
+        
+        echo ""
+        # Step 5: Create Desktop Icons extension CSS override (GNOME-specific)
+        create_desktop_icons_css "$accent_color"
+        
+        echo ""
+        # Step 6: Patch Desktop Icons extension JavaScript (GNOME-specific)
+        patch_desktop_icons_extension "$accent_color"
+        
+        echo ""
+        # Step 7: Patch Color Picker extension stylesheets (GNOME-specific)
+        patch_color_picker_extension "$accent_color"
+        
+        echo ""
+        # Step 8: Patch Privacy Indicators extension stylesheets (GNOME-specific)
+        patch_privacy_indicators_extension "$accent_color"
+        
+        echo ""
+        # Step 9: Apply to GDM (optional, GNOME-specific)
+        apply_gdm_theme
+        
+        echo ""
+        # Step 10: Set shell theme to dark variant (GNOME-specific)
+        set_shell_theme_dark
+        
+    else
+        echo "Skipping GNOME-specific theming."
+    fi
+else
+    echo "========================================"
+    echo "Note: GNOME desktop not detected"
+    echo "========================================"
+    echo "Only GTK theme overrides and Firefox/Thunderbird fix were applied."
+    echo "GNOME-specific features are not available."
+    echo ""
+fi
 
 echo ""
 echo "========================================"
@@ -945,33 +1211,29 @@ echo "Theme customization complete!"
 echo "========================================"
 echo ""
 echo "Summary:"
-echo "  • GNOME Shell themes created with accent: $accent_color"
-echo "  • GTK3/GTK4 themes configured"
-echo "  • Desktop Icons extension CSS override created"
-echo "  • Desktop Icons extension JavaScript patched (rubberband)"
-echo "  • Color Picker extension stylesheets patched"
-echo "  • Privacy Indicators extension stylesheets patched"
-echo "  • GDM themes applied (if selected)"
-echo "  • GNOME accent color set via gsettings"
-echo "  • GNOME Shell theme set to dark variant"
+echo "  • GTK3/GTK4 themes configured with accent: $accent_color"
+if [ -L "$HOME/.themes/custom-light" ] || [ -L "$HOME/.themes/custom-dark" ]; then
+    echo "  • Firefox/Thunderbird fix applied"
+fi
+
+if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
+    echo "  • GNOME Shell themes created"
+    echo "  • GNOME accent color set via gsettings"
+    echo "  • GNOME extensions patched (if installed)"
+fi
+
 echo ""
-echo "To complete setup:"
-echo "  1. Install GNOME Tweaks if not already installed:"
-echo "     sudo apt install gnome-tweaks"
-echo ""
-echo "  2. Enable User Themes extension:"
-echo "     a. Open GNOME Extensions"
-echo "     b. Enable 'User Themes' extension"
-echo ""
-echo "  3. Apply the shell theme in GNOME Tweaks:"
-echo "     Appearance → Shell → Select 'Adwaita-shell-custom-dark'"
-echo ""
-echo "  4. Restart applications to see GTK changes"
-echo "  5. Log out and back in for full system changes"
-echo ""
-echo "  6. If extensions don't update, disable and re-enable them"
-echo ""
-echo "Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+echo "Next steps:"
+echo "  1. Restart GTK applications to see changes"
+if [ -L "$HOME/.themes/custom-light" ] || [ -L "$HOME/.themes/custom-dark" ]; then
+    echo "  2. Set your desktop's application theme to 'custom-light' or 'custom-dark'"
+    echo "  3. Restart Firefox/Thunderbird"
+fi
+if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
+    echo "  4. Enable User Themes extension in GNOME Extensions"
+    echo "  5. Set shell theme to 'Adwaita-shell-custom-dark' in GNOME Tweaks"
+    echo "  6. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
+fi
 echo ""
 echo "To reset everything: $0 --reset"
 echo "========================================"
