@@ -267,7 +267,7 @@ check_adw_gtk3_exists() {
     fi
 }
 
-# Function to apply Firefox/Thunderbird fix
+# Function to apply Firefox/Thunderbird fix (creates directories with symlinks inside)
 apply_firefox_fix() {
     echo ""
     echo "========================================"
@@ -276,8 +276,9 @@ apply_firefox_fix() {
     echo "Firefox and Thunderbird have a quirk: they ignore GTK CSS overrides"
     echo "when the current theme name contains 'adwaita', 'adw', or 'adw-gtk3'."
     echo ""
-    echo "This fix creates symlinked themes with custom names to work"
-    echo "around this issue, allowing Firefox/Thunderbird to use accent colors."
+    echo "This fix creates custom-named theme directories with symlinks to"
+    echo "adw-gtk3's gtk-3.0 and gtk-4.0 directories, allowing Firefox/Thunderbird"
+    echo "to use accent colors while avoiding the adwaita detection."
     echo ""
     
     read -p "Apply Firefox/Thunderbird fix? (y/n): " -n 1 -r
@@ -315,9 +316,11 @@ apply_firefox_fix() {
     for location in "${locations[@]}"; do
         if [ -d "$location/adw-gtk3" ] && [ -z "$light_source" ]; then
             light_source="$location/adw-gtk3"
+            echo "Using adw-gtk3 from: $light_source"
         fi
         if [ -d "$location/adw-gtk3-dark" ] && [ -z "$dark_source" ]; then
             dark_source="$location/adw-gtk3-dark"
+            echo "Using adw-gtk3-dark from: $dark_source"
         fi
     done
     
@@ -326,21 +329,28 @@ apply_firefox_fix() {
         return 1
     fi
     
-    # Remove existing symlinks if they exist
-    echo "Removing existing symlinks if any..."
+    # Remove existing directories if they exist
+    echo "Removing existing custom theme directories if any..."
     rm -rf "$HOME/.themes/custom-light" 2>/dev/null
     rm -rf "$HOME/.themes/custom-dark" 2>/dev/null
     
-    # Create symlinks for the theme directories
-    echo "Creating symlinks..."
+    # Create custom-light theme directory structure
+    echo "Creating custom-light theme directory..."
+    mkdir -p "$HOME/.themes/custom-light"
     
-    # For light theme
-    echo "  Creating custom-light symlink..."
-    ln -sf "$light_source" "$HOME/.themes/custom-light"
+    # Create symlinks for gtk-3.0 and gtk-4.0 directories
+    if [ -d "$light_source/gtk-3.0" ]; then
+        ln -sf "$light_source/gtk-3.0" "$HOME/.themes/custom-light/gtk-3.0"
+        echo "  Created symlink: gtk-3.0 → $light_source/gtk-3.0"
+    else
+        echo "  Warning: gtk-3.0 directory not found in $light_source"
+    fi
     
-    # Remove the symlinked index.theme and create our own
-    if [ -L "$HOME/.themes/custom-light/index.theme" ] || [ -f "$HOME/.themes/custom-light/index.theme" ]; then
-        rm -f "$HOME/.themes/custom-light/index.theme"
+    if [ -d "$light_source/gtk-4.0" ]; then
+        ln -sf "$light_source/gtk-4.0" "$HOME/.themes/custom-light/gtk-4.0"
+        echo "  Created symlink: gtk-4.0 → $light_source/gtk-4.0"
+    else
+        echo "  Warning: gtk-4.0 directory not found in $light_source"
     fi
     
     # Create custom index.theme for light variant
@@ -352,14 +362,25 @@ Comment=adw-gtk3 theme
 Encoding=UTF-8
 GtkTheme=custom-light
 EOF
+    echo "  Created index.theme for custom-light"
     
-    # For dark theme
-    echo "  Creating custom-dark symlink..."
-    ln -sf "$dark_source" "$HOME/.themes/custom-dark"
+    # Create custom-dark theme directory structure
+    echo "Creating custom-dark theme directory..."
+    mkdir -p "$HOME/.themes/custom-dark"
     
-    # Remove the symlinked index.theme and create our own
-    if [ -L "$HOME/.themes/custom-dark/index.theme" ] || [ -f "$HOME/.themes/custom-dark/index.theme" ]; then
-        rm -f "$HOME/.themes/custom-dark/index.theme"
+    # Create symlinks for gtk-3.0 and gtk-4.0 directories
+    if [ -d "$dark_source/gtk-3.0" ]; then
+        ln -sf "$dark_source/gtk-3.0" "$HOME/.themes/custom-dark/gtk-3.0"
+        echo "  Created symlink: gtk-3.0 → $dark_source/gtk-3.0"
+    else
+        echo "  Warning: gtk-3.0 directory not found in $dark_source"
+    fi
+    
+    if [ -d "$dark_source/gtk-4.0" ]; then
+        ln -sf "$dark_source/gtk-4.0" "$HOME/.themes/custom-dark/gtk-4.0"
+        echo "  Created symlink: gtk-4.0 → $dark_source/gtk-4.0"
+    else
+        echo "  Warning: gtk-4.0 directory not found in $dark_source"
     fi
     
     # Create custom index.theme for dark variant
@@ -371,21 +392,29 @@ Comment=adw-gtk3-dark theme
 Encoding=UTF-8
 GtkTheme=custom-dark
 EOF
+    echo "  Created index.theme for custom-dark"
     
     echo ""
     echo "✅ Firefox/Thunderbird fix applied!"
     echo ""
-    echo "Created symlinked themes:"
-    echo "  • custom-light → $(readlink -f "$HOME/.themes/custom-light" 2>/dev/null || echo "$light_source")"
-    echo "  • custom-dark → $(readlink -f "$HOME/.themes/custom-dark" 2>/dev/null || echo "$dark_source")"
+    echo "Created custom theme directories:"
+    echo "  • $HOME/.themes/custom-light/"
+    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.themes/custom-light/gtk-3.0" 2>/dev/null || echo "symlink")"
+    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.themes/custom-light/gtk-4.0" 2>/dev/null || echo "symlink")"
+    echo "    └── index.theme"
+    echo ""
+    echo "  • $HOME/.themes/custom-dark/"
+    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.themes/custom-dark/gtk-3.0" 2>/dev/null || echo "symlink")"
+    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.themes/custom-dark/gtk-4.0" 2>/dev/null || echo "symlink")"
+    echo "    └── index.theme"
     echo ""
     echo "To use these themes:"
     echo "  1. Open your desktop environment's theme settings"
     echo "  2. Set the application theme to 'custom-light' or 'custom-dark'"
     echo "  3. Restart Firefox/Thunderbird to see the changes"
     echo ""
-    echo "Note: These are symlinks, so updates to the original adw-gtk3"
-    echo "      themes will be reflected automatically."
+    echo "Note: The gtk-3.0 and gtk-4.0 directories are symlinks, so updates to"
+    echo "      the original adw-gtk3 themes will be reflected automatically."
     
     return 0
 }
@@ -406,6 +435,13 @@ extract_adwaita_theme() {
     
     # Create directories
     mkdir -p "$LIGHT_TARGET" "$DARK_TARGET"
+    
+    # Check if gnome-shell-theme.gresource exists
+    if [ ! -f "/usr/share/gnome-shell/gnome-shell-theme.gresource" ]; then
+        echo "❌ GNOME Shell theme resource not found at /usr/share/gnome-shell/gnome-shell-theme.gresource"
+        echo "   Make sure you're running GNOME Shell"
+        return 1
+    fi
     
     # Extract SVG files and CSS variants once
     TEMP_DIR=$(mktemp -d)
@@ -1008,19 +1044,22 @@ reset_theme() {
     rm -f "$HOME/.themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
     rm -f "$HOME/.themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
     
-    # Remove Firefox/Thunderbird fix symlinks
-    echo "Removing Firefox/Thunderbird fix symlinks..."
-    if [ -L "$HOME/.themes/custom-light" ]; then
-        rm -f "$HOME/.themes/custom-light"
-        echo "  Removed custom-light symlink"
+    # Remove Firefox/Thunderbird fix directories
+    echo "Removing Firefox/Thunderbird fix directories..."
+    if [ -d "$HOME/.themes/custom-light" ]; then
+        # Remove symlinks first, then directory
+        rm -f "$HOME/.themes/custom-light/gtk-3.0" 2>/dev/null
+        rm -f "$HOME/.themes/custom-light/gtk-4.0" 2>/dev/null
+        rm -f "$HOME/.themes/custom-light/index.theme" 2>/dev/null
+        rmdir "$HOME/.themes/custom-light" 2>/dev/null && echo "  Removed custom-light directory"
     fi
-    if [ -L "$HOME/.themes/custom-dark" ]; then
-        rm -f "$HOME/.themes/custom-dark"
-        echo "  Removed custom-dark symlink"
+    if [ -d "$HOME/.themes/custom-dark" ]; then
+        # Remove symlinks first, then directory
+        rm -f "$HOME/.themes/custom-dark/gtk-3.0" 2>/dev/null
+        rm -f "$HOME/.themes/custom-dark/gtk-4.0" 2>/dev/null
+        rm -f "$HOME/.themes/custom-dark/index.theme" 2>/dev/null
+        rmdir "$HOME/.themes/custom-dark" 2>/dev/null && echo "  Removed custom-dark directory"
     fi
-    # Also remove any leftover index.theme files
-    rm -f "$HOME/.themes/custom-light/index.theme" 2>/dev/null
-    rm -f "$HOME/.themes/custom-dark/index.theme" 2>/dev/null
     
     # Reset GNOME accent color to default blue for dark theme (GNOME-specific)
     echo "Resetting GNOME accent color to default..."
@@ -1050,7 +1089,7 @@ reset_theme() {
     echo "  ✓ Color Picker extension stylesheets (restored from backup)"
     echo "  ✓ Privacy Indicators extension stylesheets (restored from backup)"
     echo "  ✓ GDM themes in /usr/share/themes/"
-    echo "  ✓ Firefox/Thunderbird fix symlinks"
+    echo "  ✓ Firefox/Thunderbird fix directories"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
     echo ""
@@ -1091,10 +1130,10 @@ echo "GTK Accent Color Changer"
 echo "========================================"
 echo "This script will:"
 echo "  1. Apply your chosen accent color to GTK3/GTK4 themes"
-echo "  2. Optionally apply Firefox/Thunderbird theme fix"
 echo ""
 echo "If you're using GNOME, additional options will be available:"
 echo "  • Apply accent color to GNOME Shell themes"
+echo "  • Apply Firefox/Thunderbird theme fix"
 echo "  • Patch GNOME extensions (if installed)"
 echo "  • Apply themes to GDM login screen"
 echo "  • Set GNOME accent color in system settings"
@@ -1139,10 +1178,6 @@ echo ""
 apply_gtk_accent "$accent_color"
 
 echo ""
-# Step 2: Apply Firefox/Thunderbird fix (optional)
-apply_firefox_fix
-
-echo ""
 # Check if we're in GNOME and ask about GNOME-specific features
 if check_gnome; then
     echo "========================================"
@@ -1157,6 +1192,10 @@ if check_gnome; then
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo ""
         
+        # Step 2: Apply Firefox/Thunderbird fix (GNOME-specific)
+        apply_firefox_fix
+        
+        echo ""
         # Step 3: Extract Adwaita themes (GNOME-specific)
         extract_adwaita_theme
         
@@ -1200,7 +1239,7 @@ else
     echo "========================================"
     echo "Note: GNOME desktop not detected"
     echo "========================================"
-    echo "Only GTK theme overrides and Firefox/Thunderbird fix were applied."
+    echo "Only GTK theme overrides were applied."
     echo "GNOME-specific features are not available."
     echo ""
 fi
@@ -1212,11 +1251,10 @@ echo "========================================"
 echo ""
 echo "Summary:"
 echo "  • GTK3/GTK4 themes configured with accent: $accent_color"
-if [ -L "$HOME/.themes/custom-light" ] || [ -L "$HOME/.themes/custom-dark" ]; then
-    echo "  • Firefox/Thunderbird fix applied"
-fi
-
 if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
+    if [ -d "$HOME/.themes/custom-light" ] || [ -d "$HOME/.themes/custom-dark" ]; then
+        echo "  • Firefox/Thunderbird fix applied"
+    fi
     echo "  • GNOME Shell themes created"
     echo "  • GNOME accent color set via gsettings"
     echo "  • GNOME extensions patched (if installed)"
@@ -1225,11 +1263,11 @@ fi
 echo ""
 echo "Next steps:"
 echo "  1. Restart GTK applications to see changes"
-if [ -L "$HOME/.themes/custom-light" ] || [ -L "$HOME/.themes/custom-dark" ]; then
-    echo "  2. Set your desktop's application theme to 'custom-light' or 'custom-dark'"
-    echo "  3. Restart Firefox/Thunderbird"
-fi
 if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
+    if [ -d "$HOME/.themes/custom-light" ] || [ -d "$HOME/.themes/custom-dark" ]; then
+        echo "  2. Set GNOME application theme to 'custom-light' or 'custom-dark'"
+        echo "  3. Restart Firefox/Thunderbird"
+    fi
     echo "  4. Enable User Themes extension in GNOME Extensions"
     echo "  5. Set shell theme to 'Adwaita-shell-custom-dark' in GNOME Tweaks"
     echo "  6. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
