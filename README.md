@@ -10,7 +10,7 @@ Added a --reset function (sh adwaita-accent-color-changer.sh --reset).
 
 Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-murrine may be required. I haven't tested it but it worked with adw-colors' script.
 
-Included optional copying of the shell themes to /usr/share so they are available for GDM.
+Included optional copying of the shell themes to /usr/share so they are available for GDM, apply via GDM Settings application.
 
 Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, due to theme name detection, that's why Adw-gtk3 theme optionally gets cloned in .local/share/themes and renamed.
 
