@@ -2,7 +2,7 @@
 AI-generated script that changes the accent color of GTK3/Libadwaita and the Adwaita GNOME shell theme with a user-specified hex value.
 
 Based on adw-colors' accent color changer (https://github.com/lassekongo83/adw-colors/tree/main/scripts/accent-color-change).
-Extracts the gresources of the Adwaita GNOME shell theme to ~/.themes (light and dark). Tested on Arch.
+Extracts the gresources of the Adwaita GNOME shell theme to ~/.local/share/themes. Tested on Arch.
 
 Added a --reset function (sh adwaita-accent-color-changer.sh --reset).
 
