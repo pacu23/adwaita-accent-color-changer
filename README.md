@@ -14,7 +14,7 @@ Included optional copying of the shell themes to /usr/share so they are availabl
 
 Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, due to theme name detection, that's why adw-gtk3 theme optionally gets cloned with symlinked content in .local/share/themes and renamed.
 
-Added Flatpak fix. Aside from the usual permissions for reading .config/gtk-3.0 and gtk-4.0, there's a complication when using Firefox fix, as your system theme is technically not adw-gtk3, so Flatpak doesn't automatically use the adw-gtk3 package. I don't know how to force it to use it, so instead it applies a custom theme via override, and the contents of the theme are copied from adw-gtk3, not symlinked, as it can't read symlinks to /usr/share. Also it has to be in .themes instead of .local/share/themes for whatever reason. The symlinked theme is kept at .local/share/ for better compability (it also auto updates with adw-gtk3).
+Added Flatpak fix. Aside from the usual permissions for reading .config/gtk-3.0 and gtk-4.0, there's a complication when using Firefox fix, as your system theme is technically not adw-gtk3, so Flatpak doesn't automatically use the adw-gtk3 package. I don't know how to force it to use it, so instead it applies a custom theme via override, and the contents of the theme are copied from adw-gtk3, not symlinked, as it can't read symlinks to /usr/share.
 
 Included a fix for the following extensions: Gtk4 desktop icons, Accent privacy indicators, Color picker. Modifying the extension's files in ~/.local/share/gnome-shell/extensions (if installed there). It might reset after an update, so just rerun the script. If something breaks, just reinstall the extensions.
 
