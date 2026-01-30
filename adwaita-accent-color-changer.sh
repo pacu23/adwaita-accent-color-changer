@@ -348,92 +348,209 @@ apply_firefox_fix() {
     
     # Remove existing directories if they exist
     echo "Removing existing custom theme directories if any..."
-    rm -rf "$HOME/.local/share/themes/custom_light" 2>/dev/null
-    rm -rf "$HOME/.local/share/themes/custom_dark" 2>/dev/null
+    rm -rf "$HOME/.local/share/themes/custom" 2>/dev/null
+    rm -rf "$HOME/.local/share/themes/custom-dark" 2>/dev/null
     
-    # Create custom_light theme directory structure
-    echo "Creating custom_light theme directory..."
-    mkdir -p "$HOME/.local/share/themes/custom_light"
+    # Create custom theme directory structure
+    echo "Creating custom theme directory..."
+    mkdir -p "$HOME/.local/share/themes/custom"
     
     # Create symlinks for gtk-3.0 and gtk-4.0 directories
     if [ -d "$light_source/gtk-3.0" ]; then
-        ln -sf "$light_source/gtk-3.0" "$HOME/.local/share/themes/custom_light/gtk-3.0"
+        ln -sf "$light_source/gtk-3.0" "$HOME/.local/share/themes/custom/gtk-3.0"
         echo "  Created symlink: gtk-3.0 → $light_source/gtk-3.0"
     else
         echo "  Warning: gtk-3.0 directory not found in $light_source"
     fi
     
     if [ -d "$light_source/gtk-4.0" ]; then
-        ln -sf "$light_source/gtk-4.0" "$HOME/.local/share/themes/custom_light/gtk-4.0"
+        ln -sf "$light_source/gtk-4.0" "$HOME/.local/share/themes/custom/gtk-4.0"
         echo "  Created symlink: gtk-4.0 → $light_source/gtk-4.0"
     else
         echo "  Warning: gtk-4.0 directory not found in $light_source"
     fi
     
     # Create custom index.theme for light variant
-    cat <<EOF > "$HOME/.local/share/themes/custom_light/index.theme"
+    cat <<EOF > "$HOME/.local/share/themes/custom/index.theme"
 [X-GNOME-Metatheme]
-Name=custom_light
+Name=custom
 Type=X-GNOME-Metatheme
 Comment=adw-gtk3 theme
 Encoding=UTF-8
-GtkTheme=custom_light
+GtkTheme=custom
 EOF
-    echo "  Created index.theme for custom_light"
+    echo "  Created index.theme for custom"
     
-    # Create custom_dark theme directory structure
-    echo "Creating custom_dark theme directory..."
-    mkdir -p "$HOME/.local/share/themes/custom_dark"
+    # Create custom-dark theme directory structure
+    echo "Creating custom-dark theme directory..."
+    mkdir -p "$HOME/.local/share/themes/custom-dark"
     
     # Create symlinks for gtk-3.0 and gtk-4.0 directories
     if [ -d "$dark_source/gtk-3.0" ]; then
-        ln -sf "$dark_source/gtk-3.0" "$HOME/.local/share/themes/custom_dark/gtk-3.0"
+        ln -sf "$dark_source/gtk-3.0" "$HOME/.local/share/themes/custom-dark/gtk-3.0"
         echo "  Created symlink: gtk-3.0 → $dark_source/gtk-3.0"
     else
         echo "  Warning: gtk-3.0 directory not found in $dark_source"
     fi
     
     if [ -d "$dark_source/gtk-4.0" ]; then
-        ln -sf "$dark_source/gtk-4.0" "$HOME/.local/share/themes/custom_dark/gtk-4.0"
+        ln -sf "$dark_source/gtk-4.0" "$HOME/.local/share/themes/custom-dark/gtk-4.0"
         echo "  Created symlink: gtk-4.0 → $dark_source/gtk-4.0"
     else
         echo "  Warning: gtk-4.0 directory not found in $dark_source"
     fi
     
     # Create custom index.theme for dark variant
-    cat <<EOF > "$HOME/.local/share/themes/custom_dark/index.theme"
+    cat <<EOF > "$HOME/.local/share/themes/custom-dark/index.theme"
 [X-GNOME-Metatheme]
-Name=custom_dark
+Name=custom-dark
 Type=X-GNOME-Metatheme
 Comment=adw-gtk3-dark theme
 Encoding=UTF-8
-GtkTheme=custom_dark
+GtkTheme=custom-dark
 EOF
-    echo "  Created index.theme for custom_dark"
+    echo "  Created index.theme for custom-dark"
     
     echo ""
     echo "✅ Firefox/Thunderbird fix applied!"
     echo ""
     echo "Created custom theme directories:"
-    echo "  • $HOME/.local/share/themes/custom_light/"
-    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.local/share/themes/custom_light/gtk-3.0" 2>/dev/null || echo "symlink")"
-    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.local/share/themes/custom_light/gtk-4.0" 2>/dev/null || echo "symlink")"
+    echo "  • $HOME/.local/share/themes/custom/"
+    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.local/share/themes/custom/gtk-3.0" 2>/dev/null || echo "symlink")"
+    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.local/share/themes/custom/gtk-4.0" 2>/dev/null || echo "symlink")"
     echo "    └── index.theme"
     echo ""
-    echo "  • $HOME/.local/share/themes/custom_dark/"
-    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.local/share/themes/custom_dark/gtk-3.0" 2>/dev/null || echo "symlink")"
-    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.local/share/themes/custom_dark/gtk-4.0" 2>/dev/null || echo "symlink")"
+    echo "  • $HOME/.local/share/themes/custom-dark/"
+    echo "    ├── gtk-3.0 → $(readlink -f "$HOME/.local/share/themes/custom-dark/gtk-3.0" 2>/dev/null || echo "symlink")"
+    echo "    ├── gtk-4.0 → $(readlink -f "$HOME/.local/share/themes/custom-dark/gtk-4.0" 2>/dev/null || echo "symlink")"
     echo "    └── index.theme"
     echo ""
     echo "To use these themes:"
     echo "  1. Open your desktop environment's theme settings"
-    echo "  2. Set the application theme to 'custom_light' or 'custom_dark'"
+    echo "  2. Set the application theme to 'custom' or 'custom-dark'"
     echo "  3. Restart Firefox/Thunderbird to see the changes"
     echo ""
     echo "Note: The gtk-3.0 and gtk-4.0 directories are symlinks, so updates to"
     echo "      the original adw-gtk3 themes will be reflected automatically."
     
     return 0
+}
+
+# Function to convert symlinks to actual copies for Flatpak compatibility
+convert_symlinks_to_copies() {
+    local theme_dir="$1"
+    local theme_name="$2"
+    local is_copied_theme="$3"
+    
+    if [ ! -d "$theme_dir" ]; then
+        return 1
+    fi
+    
+    echo "Converting symlinks to copies in $theme_dir..."
+    
+    # Remove symlinks first
+    rm -f "$theme_dir/gtk-3.0" 2>/dev/null
+    rm -f "$theme_dir/gtk-4.0" 2>/dev/null
+    
+    # Find the source themes
+    local light_source=""
+    local dark_source=""
+    
+    # Check in various locations
+    local locations=(
+        "/usr/share/themes"
+        "$HOME/.themes"
+        "$HOME/.local/share/themes"
+    )
+    
+    for location in "${locations[@]}"; do
+        if [ -d "$location/adw-gtk3" ] && [ -z "$light_source" ]; then
+            light_source="$location/adw-gtk3"
+        fi
+        if [ -d "$location/adw-gtk3-dark" ] && [ -z "$dark_source" ]; then
+            dark_source="$location/adw-gtk3-dark"
+        fi
+    done
+    
+    if [ -z "$light_source" ] || [ -z "$dark_source" ]; then
+        echo "❌ Could not find both adw-gtk3 and adw-gtk3-dark themes"
+        return 1
+    fi
+    
+    # Determine which source to use based on theme name
+    local source_dir=""
+    if [[ "$theme_name" == *"custom" && "$theme_name" != *"dark"* ]] || 
+       [[ "$theme_name" == *"copied" && "$theme_name" != *"dark"* ]]; then
+        source_dir="$light_source"
+    elif [[ "$theme_name" == *"custom-dark" ]] || [[ "$theme_name" == *"copied-dark" ]]; then
+        source_dir="$dark_source"
+    fi
+    
+    if [ -z "$source_dir" ]; then
+        echo "  Warning: Could not determine source for $theme_name"
+        return 1
+    fi
+    
+    # Copy gtk-3.0 directory
+    if [ -d "$source_dir/gtk-3.0" ]; then
+        cp -r "$source_dir/gtk-3.0" "$theme_dir/gtk-3.0"
+        echo "  Copied gtk-3.0 from $source_dir"
+    else
+        echo "  Warning: gtk-3.0 directory not found in $source_dir"
+    fi
+    
+    # Copy gtk-4.0 directory
+    if [ -d "$source_dir/gtk-4.0" ]; then
+        cp -r "$source_dir/gtk-4.0" "$theme_dir/gtk-4.0"
+        echo "  Copied gtk-4.0 from $source_dir"
+    else
+        echo "  Warning: gtk-4.0 directory not found in $source_dir"
+    fi
+}
+
+# Function to create copied themes for Flatpak
+create_copied_themes() {
+    echo "Creating copied themes for Flatpak compatibility..."
+    
+    # Remove existing copied themes if they exist
+    rm -rf "$HOME/.local/share/themes/custom-copied" 2>/dev/null
+    rm -rf "$HOME/.local/share/themes/custom-copied-dark" 2>/dev/null
+    
+    # Create custom-copied theme
+    echo "Creating custom-copied theme..."
+    mkdir -p "$HOME/.local/share/themes/custom-copied"
+    convert_symlinks_to_copies "$HOME/.local/share/themes/custom-copied" "custom-copied" "true"
+    
+    # Create custom-copied-dark theme
+    echo "Creating custom-copied-dark theme..."
+    mkdir -p "$HOME/.local/share/themes/custom-copied-dark"
+    convert_symlinks_to_copies "$HOME/.local/share/themes/custom-copied-dark" "custom-copied-dark" "true"
+    
+    # Create index.theme for custom-copied
+    cat <<EOF > "$HOME/.local/share/themes/custom-copied/index.theme"
+[X-GNOME-Metatheme]
+Name=custom-copied
+Type=X-GNOME-Metatheme
+Comment=adw-gtk3 theme (copied for Flatpak)
+Encoding=UTF-8
+GtkTheme=custom-copied
+EOF
+    echo "  Created index.theme for custom-copied"
+    
+    # Create index.theme for custom-copied-dark
+    cat <<EOF > "$HOME/.local/share/themes/custom-copied-dark/index.theme"
+[X-GNOME-Metatheme]
+Name=custom-copied-dark
+Type=X-GNOME-Metatheme
+Comment=adw-gtk3-dark theme (copied for Flatpak)
+Encoding=UTF-8
+GtkTheme=custom-copied-dark
+EOF
+    echo "  Created index.theme for custom-copied-dark"
+    
+    echo "✅ Copied themes created for Flatpak compatibility"
+    echo "  • custom-copied (copied from adw-gtk3)"
+    echo "  • custom-copied-dark (copied from adw-gtk3-dark)"
 }
 
 # Function to apply Flatpak fix
@@ -447,7 +564,8 @@ apply_flatpak_fix() {
     echo ""
     echo "This fix will:"
     echo "  1. Allow Flatpak apps to read your GTK theme configs"
-    echo "  2. Set Flatpak apps to use custom_dark theme, if Firefox fix is used"
+    echo "  2. Copy theme contents for Flatpak compatibility"
+    echo "  3. Set Flatpak apps to use the appropriate theme"
     echo ""
     
     read -p "Apply Flatpak fix? (y/n): " -n 1 -r
@@ -480,8 +598,8 @@ apply_flatpak_fix() {
         echo "  ✗ Failed to allow access to gtk-4.0 config"
     fi
     
-    # Check if custom_dark theme exists (from Firefox fix)
-    if [ -d "$HOME/.local/share/themes/custom_dark" ]; then
+    # Check if custom-dark theme exists (from Firefox fix)
+    if [ -d "$HOME/.local/share/themes/custom-dark" ]; then
         # Allow Flatpak apps to read custom themes
         sudo flatpak override --filesystem=xdg-data/themes
         if [ $? -eq 0 ]; then
@@ -490,18 +608,76 @@ apply_flatpak_fix() {
             echo "  ✗ Failed to allow access to custom themes"
         fi
         
-        # Set Flatpak theme to custom_dark
-        sudo flatpak override --env=GTK_THEME=custom_dark
-        if [ $? -eq 0 ]; then
-            echo "  ✓ Set Flatpak theme to custom_dark"
-            echo ""
-            echo "Note: If you want to use the light theme for Flatpak apps instead, run:"
-            echo "      sudo flatpak override --env=GTK_THEME=custom_light"
-        else
-            echo "  ✗ Failed to set Flatpak theme"
-        fi
+        echo ""
+        echo "========================================"
+        echo "Flatpak Theme Copy Method"
+        echo "========================================"
+        echo "For Flatpak to work properly, it needs actual copies of theme files"
+        echo "instead of symlinks. You have two options:"
+        echo ""
+        echo "1. OVERWRITE existing symlinked themes (custom and custom-dark)"
+        echo "   - Replaces symlinks with actual copies"
+        echo "   - System theme stays as 'custom-dark'"
+        echo "   - Flatpak uses 'custom-dark'"
+        echo "   - Loses automatic updates from adw-gtk3"
+        echo ""
+        echo "2. CREATE NEW copied themes (custom-copied and custom-copied-dark)"
+        echo "   - Keeps original symlinked themes intact"
+        echo "   - System theme stays as 'custom-dark' (symlinked)"
+        echo "   - Flatpak uses 'custom-copied-dark'"
+        echo "   - Original symlinks still auto-update with adw-gtk3"
+        echo ""
+        
+        while true; do
+            read -p "Choose option (1=Overwrite, 2=Create new, c=cancel): " -n 1 -r
+            echo
+            case $REPLY in
+                1)
+                    echo "Overwriting symlinks with copies..."
+                    # Convert existing themes from symlinks to copies
+                    convert_symlinks_to_copies "$HOME/.local/share/themes/custom" "custom" "false"
+                    convert_symlinks_to_copies "$HOME/.local/share/themes/custom-dark" "custom-dark" "false"
+                    
+                    # Set Flatpak theme to custom-dark
+                    sudo flatpak override --env=GTK_THEME=custom-dark
+                    if [ $? -eq 0 ]; then
+                        echo "  ✓ Set Flatpak theme to custom-dark"
+                        echo ""
+                        echo "Note: If you want to use the light theme for Flatpak apps instead, run:"
+                        echo "      sudo flatpak override --env=GTK_THEME=custom"
+                    else
+                        echo "  ✗ Failed to set Flatpak theme"
+                    fi
+                    break
+                    ;;
+                2)
+                    echo "Creating new copied themes..."
+                    # Create new copied themes
+                    create_copied_themes
+                    
+                    # Set Flatpak theme to custom-copied-dark
+                    sudo flatpak override --env=GTK_THEME=custom-copied-dark
+                    if [ $? -eq 0 ]; then
+                        echo "  ✓ Set Flatpak theme to custom-copied-dark"
+                        echo ""
+                        echo "Note: If you want to use the light theme for Flatpak apps instead, run:"
+                        echo "      sudo flatpak override --env=GTK_THEME=custom-copied"
+                    else
+                        echo "  ✗ Failed to set Flatpak theme"
+                    fi
+                    break
+                    ;;
+                c|C)
+                    echo "Cancelling Flatpak fix."
+                    return 0
+                    ;;
+                *)
+                    echo "Invalid choice. Please enter 1, 2, or c."
+                    ;;
+            esac
+        done
     else
-        echo "  ⚠️  custom_dark theme not found."
+        echo "  ⚠️  custom-dark theme not found."
         echo "     Flatpak theme not set. Please apply Firefox fix first or set manually."
     fi
     
@@ -512,22 +688,22 @@ apply_flatpak_fix() {
     return 0
 }
 
-# Function to apply custom_dark theme (after Firefox fix)
+# Function to apply custom-dark theme (after Firefox fix)
 apply_custom_dark_theme() {
-    echo "Applying custom_dark GTK theme..."
+    echo "Applying custom-dark GTK theme..."
     
     if command -v gsettings >/dev/null; then
-        # Set the GTK theme to custom_dark
-        gsettings set org.gnome.desktop.interface gtk-theme 'custom_dark' 2>/dev/null
+        # Set the GTK theme to custom-dark
+        gsettings set org.gnome.desktop.interface gtk-theme 'custom-dark' 2>/dev/null
         if [ $? -eq 0 ]; then
-            echo "  GTK theme set to custom_dark"
+            echo "  GTK theme set to custom-dark"
         else
             echo "  Note: Could not set GTK theme automatically."
-            echo "  Please set your GTK theme to 'custom_dark' manually."
+            echo "  Please set your GTK theme to 'custom-dark' manually."
         fi
     else
         echo "  Note: gsettings not found. Cannot set GTK theme automatically."
-        echo "  Please set your GTK theme to 'custom_dark' manually."
+        echo "  Please set your GTK theme to 'custom-dark' manually."
     fi
 }
 
@@ -539,11 +715,11 @@ extract_adwaita_theme() {
     echo "Extracting Adwaita GNOME Shell theme..."
     
     # Define theme paths in ~/.local/share/themes
-    LIGHT_TARGET="$HOME/.local/share/themes/Adwaita-shell-custom-light/gnome-shell"
-    DARK_TARGET="$HOME/.local/share/themes/Adwaita-shell-custom-dark/gnome-shell"
+    LIGHT_TARGET="$HOME/.local/share/themes/shell-custom/gnome-shell"
+    DARK_TARGET="$HOME/.local/share/themes/shell-custom-dark/gnome-shell"
     
     # Clean existing directories
-    rm -rf "$HOME/.local/share/themes/Adwaita-shell-custom-light" "$HOME/.local/share/themes/Adwaita-shell-custom-dark"
+    rm -rf "$HOME/.local/share/themes/shell-custom" "$HOME/.local/share/themes/shell-custom-dark"
     
     # Create directories
     mkdir -p "$LIGHT_TARGET" "$DARK_TARGET"
@@ -583,9 +759,29 @@ extract_adwaita_theme() {
     # Clean up temp
     rm -rf "$TEMP_DIR"
     
+    # Create index.theme for shell-custom
+    cat <<EOF > "$HOME/.local/share/themes/shell-custom/index.theme"
+[X-GNOME-Metatheme]
+Name=shell-custom
+Type=X-GNOME-Metatheme
+Comment=Custom GNOME Shell theme
+Encoding=UTF-8
+GtkTheme=shell-custom
+EOF
+    
+    # Create index.theme for shell-custom-dark
+    cat <<EOF > "$HOME/.local/share/themes/shell-custom-dark/index.theme"
+[X-GNOME-Metatheme]
+Name=shell-custom-dark
+Type=X-GNOME-Metatheme
+Comment=Custom GNOME Shell dark theme
+Encoding=UTF-8
+GtkTheme=shell-custom-dark
+EOF
+    
     echo "Theme extracted to:"
-    echo "  Light: $HOME/.local/share/themes/Adwaita-shell-custom-light/"
-    echo "  Dark:  $HOME/.local/share/themes/Adwaita-shell-custom-dark/"
+    echo "  Light: $HOME/.local/share/themes/shell-custom/"
+    echo "  Dark:  $HOME/.local/share/themes/shell-custom-dark/"
 }
 
 # Function to change accent color in GNOME Shell CSS files
@@ -969,7 +1165,7 @@ apply_gdm_theme() {
     fi
     
     # Check if themes exist
-    if [ ! -d "$HOME/.local/share/themes/Adwaita-shell-custom-dark" ] || [ ! -d "$HOME/.local/share/themes/Adwaita-shell-custom-light" ]; then
+    if [ ! -d "$HOME/.local/share/themes/shell-custom-dark" ] || [ ! -d "$HOME/.local/share/themes/shell-custom" ]; then
         echo "❌ Custom themes not found in ~/.local/share/themes/"
         echo "   Run the script without GDM option first to create themes"
         return 1
@@ -977,13 +1173,13 @@ apply_gdm_theme() {
     
     # Copy BOTH themes to system directory
     echo "  Copying DARK theme to /usr/share/themes/..."
-    sudo cp -r "$HOME/.local/share/themes/Adwaita-shell-custom-dark" "/usr/share/themes/"
+    sudo cp -r "$HOME/.local/share/themes/shell-custom-dark" "/usr/share/themes/"
     echo "  Copying LIGHT theme to /usr/share/themes/..."
-    sudo cp -r "$HOME/.local/share/themes/Adwaita-shell-custom-light" "/usr/share/themes/"
+    sudo cp -r "$HOME/.local/share/themes/shell-custom" "/usr/share/themes/"
     
     # Set permissions
-    sudo chmod -R 755 "/usr/share/themes/Adwaita-shell-custom-dark"
-    sudo chmod -R 755 "/usr/share/themes/Adwaita-shell-custom-light"
+    sudo chmod -R 755 "/usr/share/themes/shell-custom-dark"
+    sudo chmod -R 755 "/usr/share/themes/shell-custom"
     
     echo "✅ Both themes copied to system directory"
     echo ""
@@ -994,8 +1190,8 @@ apply_gdm_theme() {
     echo "1. Open 'GDM Settings' application."
     echo "2. Go to the 'Appearance' tab."
     echo "3. In the 'Shell theme' dropdown, you should now see:"
-    echo "     • Adwaita-shell-custom-dark"
-    echo "     • Adwaita-shell-custom-light"
+    echo "     • shell-custom-dark"
+    echo "     • shell-custom"
     echo "4. Select your preferred variant and click 'Apply'."
     echo ""
     echo "Note: The 'default-pure' entry is created by GDM Settings as a"
@@ -1015,11 +1211,11 @@ set_shell_theme_dark() {
     # Check if user-theme extension is enabled
     if command -v gsettings >/dev/null; then
         # Try to set the shell theme to the dark variant
-        gsettings set org.gnome.shell.extensions.user-theme name 'Adwaita-shell-custom-dark' 2>/dev/null
+        gsettings set org.gnome.shell.extensions.user-theme name 'shell-custom-dark' 2>/dev/null
         
         # Check if the command succeeded
         if [ $? -eq 0 ]; then
-            echo "  Shell theme set to Adwaita-shell-custom-dark"
+            echo "  Shell theme set to shell-custom-dark"
         else
             echo "  Note: Could not set shell theme automatically."
             echo "  You may need to enable the User Themes extension and set it manually."
@@ -1037,8 +1233,8 @@ reset_theme() {
     
     # Remove custom shell themes (GNOME-specific)
     echo "Removing custom shell themes..."
-    rm -rf "$HOME/.local/share/themes/Adwaita-shell-custom-light" 2>/dev/null
-    rm -rf "$HOME/.local/share/themes/Adwaita-shell-custom-dark" 2>/dev/null
+    rm -rf "$HOME/.local/share/themes/shell-custom" 2>/dev/null
+    rm -rf "$HOME/.local/share/themes/shell-custom-dark" 2>/dev/null
     
     # Remove GTK CSS files (desktop-agnostic)
     echo "Removing GTK CSS files..."
@@ -1132,12 +1328,12 @@ reset_theme() {
     
     # Remove GDM themes if they exist (GNOME-specific)
     echo "Removing GDM themes..."
-    if [ -d "/usr/share/themes/Adwaita-shell-custom-dark" ]; then
-        sudo rm -rf "/usr/share/themes/Adwaita-shell-custom-dark" 2>/dev/null
+    if [ -d "/usr/share/themes/shell-custom-dark" ]; then
+        sudo rm -rf "/usr/share/themes/shell-custom-dark" 2>/dev/null
         echo "  GDM dark theme removed"
     fi
-    if [ -d "/usr/share/themes/Adwaita-shell-custom-light" ]; then
-        sudo rm -rf "/usr/share/themes/Adwaita-shell-custom-light" 2>/dev/null
+    if [ -d "/usr/share/themes/shell-custom" ]; then
+        sudo rm -rf "/usr/share/themes/shell-custom" 2>/dev/null
         echo "  GDM light theme removed"
     fi
     # Also remove default-pure if it exists
@@ -1148,16 +1344,25 @@ reset_theme() {
     
     # Remove shell theme backups (GNOME-specific)
     echo "Removing shell theme backups..."
-    rm -f "$HOME/.local/share/themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
-    rm -f "$HOME/.local/share/themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
+    rm -f "$HOME/.local/share/themes/shell-custom/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
+    rm -f "$HOME/.local/share/themes/shell-custom-dark/gnome-shell/gnome-shell.css.backup.original" 2>/dev/null || true
     
     # Remove Firefox/Thunderbird fix directories
     echo "Removing Firefox/Thunderbird fix directories..."
-    if [ -d "$HOME/.local/share/themes/custom_light" ]; then
-        rm -rf "$HOME/.local/share/themes/custom_light" 2>/dev/null && echo "  Removed custom_light directory"
+    if [ -d "$HOME/.local/share/themes/custom" ]; then
+        rm -rf "$HOME/.local/share/themes/custom" 2>/dev/null && echo "  Removed custom directory"
     fi
-    if [ -d "$HOME/.local/share/themes/custom_dark" ]; then
-        rm -rf "$HOME/.local/share/themes/custom_dark" 2>/dev/null && echo "  Removed custom_dark directory"
+    if [ -d "$HOME/.local/share/themes/custom-dark" ]; then
+        rm -rf "$HOME/.local/share/themes/custom-dark" 2>/dev/null && echo "  Removed custom-dark directory"
+    fi
+    
+    # Remove copied themes (Flatpak fix)
+    echo "Removing copied themes..."
+    if [ -d "$HOME/.local/share/themes/custom-copied" ]; then
+        rm -rf "$HOME/.local/share/themes/custom-copied" 2>/dev/null && echo "  Removed custom-copied directory"
+    fi
+    if [ -d "$HOME/.local/share/themes/custom-copied-dark" ]; then
+        rm -rf "$HOME/.local/share/themes/custom-copied-dark" 2>/dev/null && echo "  Removed custom-copied-dark directory"
     fi
     
     # Reset Flatpak overrides
@@ -1204,6 +1409,7 @@ reset_theme() {
     echo "  ✓ Privacy Indicators extension stylesheets (restored from backup)"
     echo "  ✓ GDM themes in /usr/share/themes/"
     echo "  ✓ Firefox/Thunderbird fix directories"
+    echo "  ✓ Copied themes (Flatpak fix)"
     echo "  ✓ Flatpak overrides"
     echo "  ✓ GNOME accent color (reset to default)"
     echo "  ✓ GNOME Shell theme (reset to default)"
@@ -1249,15 +1455,15 @@ echo "  1. Apply your chosen accent color to GTK3/GTK4 themes"
 echo ""
 echo "If you're using GNOME, additional options will be available:"
 echo "  • Apply accent color to GNOME Shell themes"
-echo "  • Apply Firefox/Thunderbird theme fix"
-echo "  • Apply Flatpak theme fix"
-echo "  • Patch GNOME extensions (if installed)"
-echo "  • Apply themes to GDM login screen"
-echo "  • Set GNOME accent color in system settings"
-echo ""
-echo "Note: GTK theme changes work on any desktop environment"
-echo "To reset everything: $0 --reset"
-echo "========================================"
+    echo "  • Apply Firefox/Thunderbird theme fix"
+    echo "  • Apply Flatpak theme fix"
+    echo "  • Patch GNOME extensions (if installed)"
+    echo "  • Apply themes to GDM login screen"
+    echo "  • Set GNOME accent color in system settings"
+    echo ""
+    echo "Note: GTK theme changes work on any desktop environment"
+    echo "To reset everything: $0 --reset"
+    echo "========================================"
 
 # Ask for confirmation
 read -p "Continue? (y/n): " -n 1 -r
@@ -1319,8 +1525,8 @@ if check_gnome; then
         apply_flatpak_fix
         
         echo ""
-        # Step 4: Apply custom_dark theme (if Firefox fix was applied)
-        if [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null && [ -d "$HOME/.local/share/themes/custom_dark" ]; then
+        # Step 4: Apply custom-dark theme (if Firefox fix was applied)
+        if [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null && [ -d "$HOME/.local/share/themes/custom-dark" ]; then
             apply_custom_dark_theme
         fi
         
@@ -1330,8 +1536,8 @@ if check_gnome; then
         
         echo ""
         echo "Applying accent color to GNOME Shell themes..."
-        change_shell_accent "$HOME/.local/share/themes/Adwaita-shell-custom-light/gnome-shell/gnome-shell.css" "$accent_color"
-        change_shell_accent "$HOME/.local/share/themes/Adwaita-shell-custom-dark/gnome-shell/gnome-shell.css" "$accent_color"
+        change_shell_accent "$HOME/.local/share/themes/shell-custom/gnome-shell/gnome-shell.css" "$accent_color"
+        change_shell_accent "$HOME/.local/share/themes/shell-custom-dark/gnome-shell/gnome-shell.css" "$accent_color"
         
         echo ""
         # Step 6: Set GNOME accent color (GNOME-specific)
@@ -1382,9 +1588,9 @@ echo "Summary:"
 echo "  • GTK3/GTK4 themes configured with accent: $accent_color"
 echo "  • Foreground text color: $FOREGROUND_COLOR"
 if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
-    if [ -d "$HOME/.local/share/themes/custom_light" ] || [ -d "$HOME/.local/share/themes/custom_dark" ]; then
+    if [ -d "$HOME/.local/share/themes/custom" ] || [ -d "$HOME/.local/share/themes/custom-dark" ]; then
         echo "  • Firefox/Thunderbird fix applied"
-        echo "  • GTK theme set to custom_dark"
+        echo "  • GTK theme set to custom-dark"
     fi
     echo "  • GNOME Shell themes created"
     echo "  • GNOME accent color set via gsettings"
@@ -1395,12 +1601,12 @@ echo ""
 echo "Next steps:"
 echo "  1. Restart GTK applications to see changes"
 if check_gnome && [[ $REPLY =~ ^[Yy]$ ]] 2>/dev/null; then
-    if [ -d "$HOME/.local/share/themes/custom_light" ] || [ -d "$HOME/.local/share/themes/custom_dark" ]; then
-        echo "  2. GTK theme already set to 'custom_dark'"
+    if [ -d "$HOME/.local/share/themes/custom" ] || [ -d "$HOME/.local/share/themes/custom-dark" ]; then
+        echo "  2. GTK theme already set to 'custom-dark'"
         echo "  3. Restart Firefox/Thunderbird"
     fi
     echo "  4. Enable User Themes extension in GNOME Extensions"
-    echo "  5. Set shell theme to 'Adwaita-shell-custom-dark' in GNOME Tweaks"
+    echo "  5. Set shell theme to 'shell-custom-dark' in GNOME Tweaks"
     echo "  6. Restart GNOME Shell: Alt+F2, type 'r', press Enter"
 fi
 echo ""
