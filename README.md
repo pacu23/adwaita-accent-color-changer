@@ -12,9 +12,9 @@ Could be used on other DEs for theming adw-gtk3 and Libadwaita apps. Gtk-engine-
 
 Included optional copying of the shell themes to /usr/share so they are available for GDM, apply via GDM Settings application.
 
-Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, due to theme name detection, that's why Adw-gtk3 theme optionally gets cloned in .local/share/themes and renamed. Creates themes named custom_dark and custom_light, as using hyphens breaks some apps for whatever reason. Because of this the light/dark mode switch may become broken for some apps, but with Adw-gtk3 it already was, in some situations.
+Included a fix for Firefox and Thunderbird: if using adw-gtk3, they do not accept .config overrides and instead follow GNOME's system accent color, due to theme name detection, that's why adw-gtk3 theme optionally gets cloned in .local/share/themes and renamed.
 
-Added Flatpak fix. Aside from the usual permissions for reading .config/gtk-3.0 and gtk-4.0, there's a complication when using Firefox fix, as your system theme is technically not adw-gtk3, so Flatpak doesn't automatically use the adw-gtk3 package. I don't know how to force it to use it, so instead it applies custom_dark via override.
+Added Flatpak fix. Aside from the usual permissions for reading .config/gtk-3.0 and gtk-4.0, there's a complication when using Firefox fix, as your system theme is technically not adw-gtk3, so Flatpak doesn't automatically use the adw-gtk3 package. I don't know how to force it to use it, so instead it applies custom-dark via override, and the contents of the theme become copied from adw-gtk3, not symlinked, as it can't read symlinks to /usr/share.
 
 Included a fix for the following extensions: Gtk4 desktop icons, Accent privacy indicators, Color picker. Modifying the extension's files in ~/.local/share/gnome-shell/extensions (if installed there). It might reset after an update, so just rerun the script. If something breaks, just reinstall the extensions.
 
