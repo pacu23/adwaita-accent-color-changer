@@ -436,47 +436,6 @@ EOF
     return 0
 }
 
-# Function to convert symlinks to actual copies for Flatpak compatibility
-convert_symlinks_to_copies() {
-    local theme_dir="$1"
-    
-    if [ ! -d "$theme_dir" ]; then
-        return 1
-    fi
-    
-    echo "Converting symlinks to copies in $theme_dir for Flatpak compatibility..."
-    
-    # Check and convert gtk-3.0 if it's a symlink
-    if [ -L "$theme_dir/gtk-3.0" ]; then
-        echo "  Converting gtk-3.0 symlink to copy..."
-        local target=$(readlink -f "$theme_dir/gtk-3.0" 2>/dev/null)
-        if [ -d "$target" ]; then
-            rm -f "$theme_dir/gtk-3.0"
-            cp -r "$target" "$theme_dir/gtk-3.0"
-            echo "    Copied gtk-3.0 from $target"
-        else
-            echo "    Warning: Could not resolve gtk-3.0 target"
-        fi
-    else
-        echo "  gtk-3.0 is already a directory (not a symlink)"
-    fi
-    
-    # Check and convert gtk-4.0 if it's a symlink
-    if [ -L "$theme_dir/gtk-4.0" ]; then
-        echo "  Converting gtk-4.0 symlink to copy..."
-        local target=$(readlink -f "$theme_dir/gtk-4.0" 2>/dev/null)
-        if [ -d "$target" ]; then
-            rm -f "$theme_dir/gtk-4.0"
-            cp -r "$target" "$theme_dir/gtk-4.0"
-            echo "    Copied gtk-4.0 from $target"
-        else
-            echo "    Warning: Could not resolve gtk-4.0 target"
-        fi
-    else
-        echo "  gtk-4.0 is already a directory (not a symlink)"
-    fi
-}
-
 # Function to apply Flatpak fix
 apply_flatpak_fix() {
     echo ""
@@ -488,7 +447,7 @@ apply_flatpak_fix() {
     echo ""
     echo "This fix will:"
     echo "  1. Allow Flatpak apps to read your GTK theme configs"
-    echo "  2. Set Flatpak apps to use custom-dark theme"
+    echo "  2. Set Flatpak apps to use custom-dark theme, if Firefox fix is used"
     echo ""
     
     read -p "Apply Flatpak fix? (y/n): " -n 1 -r
@@ -523,15 +482,14 @@ apply_flatpak_fix() {
     
     # Check if custom-dark theme exists (from Firefox fix)
     if [ -d "$HOME/.local/share/themes/custom-dark" ]; then
-        # Convert symlinks to copies for Flatpak compatibility
-        convert_symlinks_to_copies "$HOME/.local/share/themes/custom-dark"
-        
-        # Also convert custom-light if it exists
-        if [ -d "$HOME/.local/share/themes/custom-light" ]; then
-            convert_symlinks_to_copies "$HOME/.local/share/themes/custom-light"
+        # Allow Flatpak apps to read custom themes
+        sudo flatpak override --filesystem=xdg-data/themes
+        if [ $? -eq 0 ]; then
+            echo "  ✓ Allowed Flatpak access to custom themes"
+        else
+            echo "  ✗ Failed to allow access to custom themes"
         fi
         
-        sudo flatpak override --filesystem=xdg-data/themes
         # Set Flatpak theme to custom-dark
         sudo flatpak override --env=GTK_THEME=custom-dark
         if [ $? -eq 0 ]; then
