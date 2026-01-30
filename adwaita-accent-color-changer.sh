@@ -436,6 +436,47 @@ EOF
     return 0
 }
 
+# Function to convert symlinks to actual copies for Flatpak compatibility
+convert_symlinks_to_copies() {
+    local theme_dir="$1"
+    
+    if [ ! -d "$theme_dir" ]; then
+        return 1
+    fi
+    
+    echo "Converting symlinks to copies in $theme_dir for Flatpak compatibility..."
+    
+    # Check and convert gtk-3.0 if it's a symlink
+    if [ -L "$theme_dir/gtk-3.0" ]; then
+        echo "  Converting gtk-3.0 symlink to copy..."
+        local target=$(readlink -f "$theme_dir/gtk-3.0" 2>/dev/null)
+        if [ -d "$target" ]; then
+            rm -f "$theme_dir/gtk-3.0"
+            cp -r "$target" "$theme_dir/gtk-3.0"
+            echo "    Copied gtk-3.0 from $target"
+        else
+            echo "    Warning: Could not resolve gtk-3.0 target"
+        fi
+    else
+        echo "  gtk-3.0 is already a directory (not a symlink)"
+    fi
+    
+    # Check and convert gtk-4.0 if it's a symlink
+    if [ -L "$theme_dir/gtk-4.0" ]; then
+        echo "  Converting gtk-4.0 symlink to copy..."
+        local target=$(readlink -f "$theme_dir/gtk-4.0" 2>/dev/null)
+        if [ -d "$target" ]; then
+            rm -f "$theme_dir/gtk-4.0"
+            cp -r "$target" "$theme_dir/gtk-4.0"
+            echo "    Copied gtk-4.0 from $target"
+        else
+            echo "    Warning: Could not resolve gtk-4.0 target"
+        fi
+    else
+        echo "  gtk-4.0 is already a directory (not a symlink)"
+    fi
+}
+
 # Function to apply Flatpak fix
 apply_flatpak_fix() {
     echo ""
@@ -447,7 +488,7 @@ apply_flatpak_fix() {
     echo ""
     echo "This fix will:"
     echo "  1. Allow Flatpak apps to read your GTK theme configs"
-    echo "  2. Set Flatpak apps to use adw-gtk3-dark theme"
+    echo "  2. Set Flatpak apps to use custom-dark theme"
     echo ""
     
     read -p "Apply Flatpak fix? (y/n): " -n 1 -r
@@ -480,15 +521,30 @@ apply_flatpak_fix() {
         echo "  ✗ Failed to allow access to gtk-4.0 config"
     fi
     
-    # Set Flatpak theme to adw-gtk3-dark
-    sudo flatpak override --env=GTK_THEME=adw-gtk3-dark
-    if [ $? -eq 0 ]; then
-        echo "  ✓ Set Flatpak theme to adw-gtk3-dark"
-        echo ""
-        echo "Note: If you want to use the light theme for Flatpak apps instead, run:"
-        echo "      sudo flatpak override --env=GTK_THEME=adw-gtk3"
+    # Check if custom-dark theme exists (from Firefox fix)
+    if [ -d "$HOME/.local/share/themes/custom-dark" ]; then
+        # Convert symlinks to copies for Flatpak compatibility
+        convert_symlinks_to_copies "$HOME/.local/share/themes/custom-dark"
+        
+        # Also convert custom-light if it exists
+        if [ -d "$HOME/.local/share/themes/custom-light" ]; then
+            convert_symlinks_to_copies "$HOME/.local/share/themes/custom-light"
+        fi
+        
+        sudo flatpak override --filesystem=xdg-data/themes
+        # Set Flatpak theme to custom-dark
+        sudo flatpak override --env=GTK_THEME=custom-dark
+        if [ $? -eq 0 ]; then
+            echo "  ✓ Set Flatpak theme to custom-dark"
+            echo ""
+            echo "Note: If you want to use the light theme for Flatpak apps instead, run:"
+            echo "      sudo flatpak override --env=GTK_THEME=custom-light"
+        else
+            echo "  ✗ Failed to set Flatpak theme"
+        fi
     else
-        echo "  ✗ Failed to set Flatpak theme"
+        echo "  ⚠️  custom-dark theme not found."
+        echo "     Flatpak theme not set. Please apply Firefox fix first or set manually."
     fi
     
     echo ""
@@ -1140,18 +1196,10 @@ reset_theme() {
     # Remove Firefox/Thunderbird fix directories
     echo "Removing Firefox/Thunderbird fix directories..."
     if [ -d "$HOME/.local/share/themes/custom-light" ]; then
-        # Remove symlinks first, then directory
-        rm -f "$HOME/.local/share/themes/custom-light/gtk-3.0" 2>/dev/null
-        rm -f "$HOME/.local/share/themes/custom-light/gtk-4.0" 2>/dev/null
-        rm -f "$HOME/.local/share/themes/custom-light/index.theme" 2>/dev/null
-        rmdir "$HOME/.local/share/themes/custom-light" 2>/dev/null && echo "  Removed custom-light directory"
+        rm -rf "$HOME/.local/share/themes/custom-light" 2>/dev/null && echo "  Removed custom-light directory"
     fi
     if [ -d "$HOME/.local/share/themes/custom-dark" ]; then
-        # Remove symlinks first, then directory
-        rm -f "$HOME/.local/share/themes/custom-dark/gtk-3.0" 2>/dev/null
-        rm -f "$HOME/.local/share/themes/custom-dark/gtk-4.0" 2>/dev/null
-        rm -f "$HOME/.local/share/themes/custom-dark/index.theme" 2>/dev/null
-        rmdir "$HOME/.local/share/themes/custom-dark" 2>/dev/null && echo "  Removed custom-dark directory"
+        rm -rf "$HOME/.local/share/themes/custom-dark" 2>/dev/null && echo "  Removed custom-dark directory"
     fi
     
     # Reset Flatpak overrides
